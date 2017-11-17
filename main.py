@@ -51,8 +51,8 @@ TRAIN = True
 epoc = 100
 train_iter = 1
 batch_size = 10
-show_loss_every = 10
-show_acc_every = 10
+show_loss_every = 100
+show_acc_every = 100
 
 LAYERS = 1
 HIDDEN_DIM = 200
@@ -77,7 +77,8 @@ params["lp_bp"] = pc.add_lookup_parameters((VOCAB_SIZE, INPUT_DIM))
 params["R"] = pc.add_parameters((BIPOS_SIZE, HIDDEN_DIM * 2))
 params["bias"] = pc.add_parameters((BIPOS_SIZE))
 
-params["R_bi_b"] = pc.add_parameters((2, INPUT_DIM * 2))
+params["R_bi_b"] = pc.add_parameters((2, INPUT_DIM))
+# params["R_bi_b"] = pc.add_parameters((2, INPUT_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
 
 
@@ -93,8 +94,6 @@ def do_one_sentence(l2rlstm, r2llstm, char_seq, bipos_seq):
     num_cor = 0
     num_cor_bi = 0
     num_cor_pos = 0
-
-    num_b = 0
 
     dy.renew_cg()
     s_l2r_0 = l2rlstm.initial_state()
@@ -126,20 +125,14 @@ def do_one_sentence(l2rlstm, r2llstm, char_seq, bipos_seq):
                 num_cor += 1
             if((bpd.i2x[chosen])[0] == (bpd.i2x[bipos_seq[i]])[0]):
                 num_cor_bi += 1
-            # if ((bpd.i2x[chosen])[1:-1] == (bpd.i2x[bipos_seq[i]])[1:-1]):
-            #     num_cor_pos += 1
-            if (bpd.i2x[chosen])[0] == 'B':
-                num_b += 1
-                if ((bpd.i2x[chosen])[1:-1] == (bpd.i2x[bipos_seq[i]])[1:-1]):
-                    num_cor_pos += 1
-
-    loss = dy.esum(loss)
-    return loss, num_cor, num_cor_bi, num_cor_pos, num_b
+            if ((bpd.i2x[chosen])[1:-1] == (bpd.i2x[bipos_seq[i]])[1:-1]):
+                num_cor_pos += 1
 
 
 
     loss = dy.esum(loss)
-    return loss, num_cor
+    return loss, num_cor, num_cor_bi, num_cor_pos, lstm_outs
+
 
 def get_wh_seq(char_seq, bipos_seq, bi_b_seq):
     ret = []
@@ -165,6 +158,7 @@ def get_wh_seq(char_seq, bipos_seq, bi_b_seq):
             i += 1
     return ret, w_1st_chars
 
+
 def bi_b(wh_seq, w_1st_chars, bi_b_seq):
     num_cor = 0
 
@@ -184,6 +178,25 @@ def bi_b(wh_seq, w_1st_chars, bi_b_seq):
     return loss, num_cor
 
 
+def bi_bunsetsu(lstmout, bi_b_seq):
+    num_cor = 0
+
+    R_bi_b = dy.parameter(params["R_bi_b"])
+    bias_bi_b = dy.parameter(params["bias_bi_b"])
+    loss = []
+    for i in range(len(bi_b_seq)):
+        probs = dy.softmax(R_bi_b * lstmout[i] + bias_bi_b)
+        loss.append(-dy.log(dy.pick(probs, bi_b_seq[i])))
+
+        if not TRAIN:
+            chosen = np.asscalar(np.argmax(probs.npvalue()))
+            if(chosen == bi_b_seq[i]):
+                # print(chosen, " ", bi_b_seq[w_1st_chars[i]])
+                num_cor += 1
+    loss = dy.esum(loss)
+    return loss, num_cor
+
+
 
 def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
     trainer = dy.SimpleSGDTrainer(pc)
@@ -193,7 +206,7 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
             idx = i if not TRAIN else np.random.randint(len(char_seqs))
             if len(char_seqs[idx]) == 0 or len(bi_b_seqs[idx]) == 0:
                 continue
-            loss, _, _, _, _ = do_one_sentence(l2rlstm, r2llstm, char_seqs[idx], bipos_seqs[idx])
+            loss, _, _, _, lstmout = do_one_sentence(l2rlstm, r2llstm, char_seqs[idx], bipos_seqs[idx])
             losses.append(loss)
             if(i % batch_size):
                 loss_value = loss.value()
@@ -203,18 +216,23 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
                 print(i, " bipos loss")
                 print(loss_value)
 
-            seq_wh, w_1st_chars = get_wh_seq(char_seqs[i], bipos_seqs[i], bi_b_seqs[i])
+            seq_wh, w_1st_chars = get_wh_seq(char_seqs[idx], bipos_seqs[idx], bi_b_seqs[idx])
             if(len(seq_wh) == 0):
                 continue
-            loss_bi_b, _ = bi_b(seq_wh, w_1st_chars, bi_b_seqs[i])
+            # loss_bi_b, _ = bi_b(seq_wh, w_1st_chars, bi_b_seqs[i])
+            loss_bi_bunsetsu, _ = bi_bunsetsu(lstmout, bi_b_seqs[idx])
 
             if i % batch_size:
-                loss_bi_b_value = loss_bi_b.value()
-                loss_bi_b.backward()
+                # loss_bi_b_value = loss_bi_b.value()
+                # loss_bi_b.backward()
+                loss_bi_bunsetsu_value = loss_bi_bunsetsu.value()
+                loss_bi_bunsetsu.backward()
                 trainer.update()
             if i % show_loss_every == 0 and i != 0:
-                print(i, " bi_b loss")
-                print(loss_bi_b_value)
+                # print(i, " bi_b loss")
+                # print(loss_bi_b_value)
+                print(i, " bi_bunsetsu loss")
+                print(loss_bi_bunsetsu_value)
 
 
 
@@ -229,31 +247,30 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
 
     num_tot_bi_b = 0
     num_tot_cor_bi_b = 0
-
-    num_tot_b = 0
     for i in range(len(char_seqs)):
         if(len(char_seqs[i]) == 0):
             continue
-        loss, num_cor, num_cor_bi, num_cor_pos, num_b = do_one_sentence(l2rlstm, r2llstm, char_seqs[i], bipos_seqs[i])
+        # loss, num_cor, num_cor_bi, num_cor_pos = do_one_sentence(l2rlstm, r2llstm, char_seqs[i], bipos_seqs[i])
+        loss, num_cor, num_cor_bi, num_cor_pos, lstmouts = do_one_sentence(l2rlstm, r2llstm, char_seqs[i], bipos_seqs[i])
         num_tot += len(char_seqs[i])
         num_tot_cor += num_cor
         num_tot_cor_bi += num_cor_bi
         num_tot_cor_pos += num_cor_pos
 
-        num_tot_b += num_b
-
         if i % show_acc_every == 0 and i != 0:
             print("accuracy bipos: ", num_tot_cor / num_tot)
             print("accuracy bi: ", num_tot_cor_bi / num_tot)
-            # print("accuracy pos: ", num_tot_cor_pos / num_tot)
-            print("accuracy pos: ", num_tot_cor_pos / num_tot_b)
+            print("accuracy pos: ", num_tot_cor_pos / num_tot)
+
             print("loss bipos: ", loss.value())
 
         seq_wh, w_1st_chars = get_wh_seq(char_seqs[i], bipos_seqs[i], bi_b_seqs[i])
         if (len(seq_wh) == 0):
             continue
-        loss_bi_b, num_cor_bi_b = bi_b(seq_wh, w_1st_chars, bi_b_seqs[i])
-        num_tot_bi_b += len(seq_wh)
+        # loss_bi_b, num_cor_bi_b = bi_b(seq_wh, w_1st_chars, bi_b_seqs[i])
+        loss_bi_b, num_cor_bi_b = bi_bunsetsu(lstmouts[i], bi_b_seqs[i])
+        # num_tot_bi_b += len(seq_wh)
+        num_tot_bi_b += len(char_seqs[i])
         num_tot_cor_bi_b += num_cor_bi_b
         if i % show_acc_every == 0 and i != 0:
             print("accuracy chunking: ", num_tot_cor_bi_b / num_tot_bi_b)
