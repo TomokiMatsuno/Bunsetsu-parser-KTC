@@ -2,11 +2,9 @@ import numpy as np
 import dynet as dy
 import glob
 
-from collections import defaultdict
-from read_file import *
+from config import *
 from paths import *
 from file_reader import DataFrameKtc
-from file_reader import DataFrameUD
 
 
 files = glob.glob(path2KTC + 'syn/*ED.*')
@@ -19,7 +17,7 @@ print(files)
 df = DataFrameKtc
 
 train_sents = []
-for file in files[0:-1]:
+for file in files[0:1]:
     print('[train] reading this file: ', file)
     lines = df.file2lines(df, file, ' ', 'euc-jp')
     train_sents.extend(df.lines2sents(df, lines))
@@ -45,20 +43,10 @@ for sent in dev_sents:
 
 
 
-train_word_seqs, train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs = df.sents2ids([wd, cd, bpd], train_sents)
+train_word_seqs, train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs, train_chunk_deps = df.sents2ids([wd, cd, bpd], train_sents)
 
-TRAIN = True
-epoc = 100
-train_iter = 1
-batch_size = 10
-show_loss_every = 100
-show_acc_every = 100
 
-LAYERS = 1
-HIDDEN_DIM = 200
-INPUT_DIM = HIDDEN_DIM * 2
-
-dev_word_seqs, dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs = df.sents2ids([wd, cd, bpd], dev_sents)
+dev_word_seqs, dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs, dev_chunk_deps = df.sents2ids([wd, cd, bpd], dev_sents)
 
 ###Neural Network
 
@@ -71,15 +59,22 @@ l2rlstm = dy.LSTMBuilder(LAYERS, INPUT_DIM, HIDDEN_DIM, pc)
 r2llstm = dy.LSTMBuilder(LAYERS, INPUT_DIM, HIDDEN_DIM, pc)
 
 params = {}
-params["lp_c"] = pc.add_lookup_parameters((VOCAB_SIZE, INPUT_DIM))
-params["lp_bp"] = pc.add_lookup_parameters((VOCAB_SIZE, INPUT_DIM))
+params["lp_c"] = pc.add_lookup_parameters((VOCAB_SIZE + 1, INPUT_DIM))
+params["lp_bp"] = pc.add_lookup_parameters((VOCAB_SIZE + 1, INPUT_DIM))
 
 params["R"] = pc.add_parameters((BIPOS_SIZE, HIDDEN_DIM * 2))
 params["bias"] = pc.add_parameters((BIPOS_SIZE))
 
+params["R_bemb"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
+params["R_bemb_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
+
+
 params["R_bi_b"] = pc.add_parameters((2, INPUT_DIM))
 # params["R_bi_b"] = pc.add_parameters((2, INPUT_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
+
+# params["R_bunsetsu_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2 + 1))
+params["R_bunsetsu_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
 
 
 def linear_interpolation(bias, R, inputs):
@@ -95,7 +90,7 @@ def do_one_sentence(l2rlstm, r2llstm, char_seq, bipos_seq):
     num_cor_bi = 0
     num_cor_pos = 0
 
-    dy.renew_cg()
+    # dy.renew_cg()
     s_l2r_0 = l2rlstm.initial_state()
     s_r2l_0 = r2llstm.initial_state()
 
@@ -116,7 +111,8 @@ def do_one_sentence(l2rlstm, r2llstm, char_seq, bipos_seq):
 
     for i in range(len(char_seq)):
         probs = dy.softmax(R*lstm_outs[i] + bias)
-        loss.append(-dy.log(dy.pick(probs, bipos_seq[i])))
+        loss.append(dy.pickneglogsoftmax(probs, bipos_seq[i]))
+        probs.forward()
 
         if(not TRAIN):
             chosen = np.argmax(probs.npvalue())
@@ -197,44 +193,151 @@ def bi_bunsetsu(lstmout, bi_b_seq):
     return loss, num_cor
 
 
+def dep_bunsetsu(bembs):
+    # lp_c = params["lp_c"]
+    R_bunsetsu_biaffine = dy.parameter(params["R_bunsetsu_biaffine"])
+    slen = len(bembs)
+    # bembs = [lp_c[cd.x2i["ROOT"]]] + bembs
+    bembs = dy.concatenate(bembs, 1)
+    input_size = HIDDEN_DIM * 2
+
+    blin = bilinear(bembs, R_bunsetsu_biaffine, bembs, input_size, slen, 1, 1, False, False)
+    arc_loss = dy.reshape(blin, (slen,), slen)
+
+    arc_preds = blin.npvalue().argmax(0)
+
+    return arc_loss, arc_preds
+
+
+def bunsetsu_range(bi_bunsetsu_seq):
+    ret = []
+    start = 0
+
+    for i in range(1, len(bi_bunsetsu_seq)):
+        if bi_bunsetsu_seq[i] == 0:
+            end = i - 1
+            ret.append((start, end))
+            start = i
+
+    return ret
+
+
+def bunsetsu_embds(lstmout, bipos_seq, bunsetsu_ranges):
+    ret = []
+    # lp_c = dy.parameter(params["lp_c"])
+    R_bemb = dy.parameter(params["R_bemb"])
+    R_bemb_bias = dy.parameter(params["R_bemb_bias"])
+
+    # ret.append(lp_c[wd.x2i["ROOT"]])
+
+    for br in bunsetsu_ranges:
+        a = [l for l in lstmout[br[0]: br[1]]]
+        b = [b for b in bipos_seq[br[0]: br[1]]]
+        ret.append(linear_interpolation(R_bemb_bias, R_bemb, lstmout[br[0]: br[1]] + bipos_seq[br[0]: br[1]]))
+
+    return ret
+
+
+
+def bilinear(x, W, y, input_size, seq_len, batch_size, num_outputs=1, bias_x=False, bias_y=False):
+    # x,y: (input_size x seq_len) x batch_size
+    if bias_x:
+        x = dy.concatenate([x, dy.inputTensor(np.ones((1, seq_len), dtype=np.float32))])
+    if bias_y:
+        y = dy.concatenate([y, dy.inputTensor(np.ones((1, seq_len), dtype=np.float32))])
+
+    nx, ny = input_size + bias_x, input_size + bias_y
+    # W: (num_outputs x ny) x nx
+    lin = W * x
+    if num_outputs > 1:
+        lin = dy.reshape(lin, (ny, num_outputs * seq_len), batch_size=batch_size)
+    blin = dy.transpose(y) * lin
+    if num_outputs > 1:
+        blin = dy.reshape(blin, (seq_len, num_outputs, seq_len), batch_size=batch_size)
+    # seq_len_y x seq_len_x if output_size == 1
+    # seq_len_y x num_outputs x seq_len_x else
+    return blin
+
 
 def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
     trainer = dy.SimpleSGDTrainer(pc)
     losses = []
+    losses_bunsetsu = []
+    losses_arcs = []
+
+    lp_bp = params["lp_bp"]
+
     for it in range(train_iter):
+        # dy.renew_cg()
         for i in (range(len(char_seqs))):
-            idx = i if not TRAIN else np.random.randint(len(char_seqs))
+            if i % batch_size == 0:
+                losses = []
+                losses_bunsetsu = []
+                losses_arcs = []
+
+                dy.renew_cg()
+
+            # idx = i if not TRAIN else np.random.randint(len(char_seqs))
+            idx = i
             if len(char_seqs[idx]) == 0 or len(bi_b_seqs[idx]) == 0:
                 continue
             loss, _, _, _, lstmout = do_one_sentence(l2rlstm, r2llstm, char_seqs[idx], bipos_seqs[idx])
             losses.append(loss)
-            if(i % batch_size):
+            # dy.esum(losses)
+            if(i % batch_size == 0) and i != 0:
                 loss_value = loss.value()
-                loss.backward()
-                trainer.update()
+                # dy.esum(losses)
+                # loss.backward()
+                # trainer.update()
             if i % show_loss_every == 0 and i != 0:
                 print(i, " bipos loss")
                 print(loss_value)
 
-            seq_wh, w_1st_chars = get_wh_seq(char_seqs[idx], bipos_seqs[idx], bi_b_seqs[idx])
-            if(len(seq_wh) == 0):
-                continue
+            # seq_wh, w_1st_chars = get_wh_seq(char_seqs[idx], bipos_seqs[idx], bi_b_seqs[idx])
+            # if(len(seq_wh) == 0):
+            #     continue
             # loss_bi_b, _ = bi_b(seq_wh, w_1st_chars, bi_b_seqs[i])
             loss_bi_bunsetsu, _ = bi_bunsetsu(lstmout, bi_b_seqs[idx])
+            losses_bunsetsu.append(loss_bi_bunsetsu)
+            # dy.esum(losses_bunsetsu)
 
-            if i % batch_size:
+            if i % batch_size == 0 and i != 0:
                 # loss_bi_b_value = loss_bi_b.value()
                 # loss_bi_b.backward()
                 loss_bi_bunsetsu_value = loss_bi_bunsetsu.value()
-                loss_bi_bunsetsu.backward()
-                trainer.update()
+
+                # loss_bi_bunsetsu.backward()
+                # trainer.update()
             if i % show_loss_every == 0 and i != 0:
                 # print(i, " bi_b loss")
                 # print(loss_bi_b_value)
                 print(i, " bi_bunsetsu loss")
                 print(loss_bi_bunsetsu_value)
 
+            bunsetsu_ranges = bunsetsu_range(bi_b_seqs[idx])
+            bembs = bunsetsu_embds(lstmout, [lp_bp[bp] for bp in bipos_seqs[idx]], bunsetsu_ranges)
+            arc_loss, arc_preds = dep_bunsetsu(bembs)
 
+            losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
+
+
+            if i % batch_size == 0 and i != 0:
+                # loss_bi_b_value = loss_bi_b.value()
+                # loss_bi_b.backward()
+                losses_arcs.extend(losses)
+                losses_arcs.extend(losses_bunsetsu)
+
+                sum_losses_arcs = dy.esum(losses_arcs)
+                sum_losses_arcs_value = sum_losses_arcs.value()
+                sum_losses_arcs.backward()
+                trainer.update()
+
+                # dy.renew_cg()
+            if i % show_loss_every == 0 and i != 0:
+                # print(i, " bi_b loss")
+                # print(loss_bi_b_value)
+                print(i, " arcs loss")
+                print(sum_losses_arcs_value)
 
 
 
@@ -247,11 +350,18 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
 
     num_tot_bi_b = 0
     num_tot_cor_bi_b = 0
+
+    num_tot_bunsetsu_dep = 0
+    num_tot_cor_bunsetsu_dep = 0
+
+    lp_bp = params["lp_bp"]
+
+
     for i in range(len(char_seqs)):
         if(len(char_seqs[i]) == 0):
             continue
         # loss, num_cor, num_cor_bi, num_cor_pos = do_one_sentence(l2rlstm, r2llstm, char_seqs[i], bipos_seqs[i])
-        loss, num_cor, num_cor_bi, num_cor_pos, lstmouts = do_one_sentence(l2rlstm, r2llstm, char_seqs[i], bipos_seqs[i])
+        loss, num_cor, num_cor_bi, num_cor_pos, lstmout = do_one_sentence(l2rlstm, r2llstm, char_seqs[i], bipos_seqs[i])
         num_tot += len(char_seqs[i])
         num_tot_cor += num_cor
         num_tot_cor_bi += num_cor_bi
@@ -268,13 +378,28 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
         if (len(seq_wh) == 0):
             continue
         # loss_bi_b, num_cor_bi_b = bi_b(seq_wh, w_1st_chars, bi_b_seqs[i])
-        loss_bi_b, num_cor_bi_b = bi_bunsetsu(lstmouts[i], bi_b_seqs[i])
+        loss_bi_b, num_cor_bi_b = bi_bunsetsu(lstmout, bi_b_seqs[i])
         # num_tot_bi_b += len(seq_wh)
         num_tot_bi_b += len(char_seqs[i])
         num_tot_cor_bi_b += num_cor_bi_b
         if i % show_acc_every == 0 and i != 0:
             print("accuracy chunking: ", num_tot_cor_bi_b / num_tot_bi_b)
             print("loss chuncking: ", loss_bi_b.value())
+
+        bunsetsu_ranges = bunsetsu_range(bi_b_seqs[i])
+        bembs = bunsetsu_embds(lstmout, [lp_bp[bp] for bp in bipos_seqs[i]], bunsetsu_ranges)
+        arc_loss, arc_preds = dep_bunsetsu(bembs)
+
+
+        num_tot_bunsetsu_dep += len(bembs)
+        num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, dev_chunk_deps[i]))
+
+            # dy.renew_cg()
+        if i % show_acc_every == 0 and i != 0:
+            # print(i, " bi_b loss")
+            # print(loss_bi_b_value)
+            print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
+        dy.renew_cg()
 
     return
 
