@@ -17,7 +17,7 @@ print(files)
 df = DataFrameKtc
 
 train_sents = []
-for file in files[0:-1]:
+for file in files[0:1]:
     print('[train] reading this file: ', file)
     lines = df.file2lines(df, file, ' ', 'euc-jp')
     train_sents.extend(df.lines2sents(df, lines))
@@ -65,11 +65,11 @@ params["lp_bp"] = pc.add_lookup_parameters((VOCAB_SIZE + 1, INPUT_DIM))
 params["R"] = pc.add_parameters((BIPOS_SIZE, HIDDEN_DIM * 2))
 params["bias"] = pc.add_parameters((BIPOS_SIZE))
 
-params["R_bemb"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
+params["R_bemb"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2 + INPUT_DIM))
 params["R_bemb_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
 
 
-params["R_bi_b"] = pc.add_parameters((2, INPUT_DIM))
+params["R_bi_b"] = pc.add_parameters((2, HIDDEN_DIM * 2))
 # params["R_bi_b"] = pc.add_parameters((2, INPUT_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
 
@@ -231,9 +231,8 @@ def bunsetsu_embds(lstmout, bipos_seq, bunsetsu_ranges):
     # ret.append(lp_c[wd.x2i["ROOT"]])
 
     for br in bunsetsu_ranges:
-        a = [l for l in lstmout[br[0]: br[1]]]
-        b = [b for b in bipos_seq[br[0]: br[1]]]
-        ret.append(linear_interpolation(R_bemb_bias, R_bemb, lstmout[br[0]: br[1]] + bipos_seq[br[0]: br[1]]))
+        # ret.append(linear_interpolation(R_bemb_bias, R_bemb, lstmout[br[0]: br[1]] + bipos_seq[br[0]: br[1]]))
+        ret.append(linear_interpolation(R_bemb_bias, R_bemb, [dy.concatenate([l, b]) for l, b in zip(lstmout[br[0]: br[1]], bipos_seq[br[0]: br[1]])]))
 
     return ret
 
