@@ -11,17 +11,14 @@ files = glob.glob(path2KTC + 'syn/*.*')
 # files = [path2KTC + 'syn/9501ED.KNP']
 # files = glob.glob(path2KTC + 'just-one-sentence.txt')
 
-print(path2UD)
-
 print(files)
 
 df = DataFrameKtc
 
 train_sents = []
-for file in files[0:-1]:
+for file in files[0:1]:
     print('[train] reading this file: ', file)
-    lines = df.file2lines(df, file, ' ', 'euc-jp')
-    # lines = df.file2lines(df, file, ' ', 'utf-8')
+    lines = df.file2lines(df, file, ' ', encoding)
     train_sents.extend(df.lines2sents(df, lines))
 wd, cd, bpd = df.sents2dicts(df, train_sents)
 
@@ -32,8 +29,7 @@ bpd.freeze()
 dev_sents = []
 for file in files[-1:]:
     print('[dev] reading this file: ', file)
-    lines = df.file2lines(df, file, ' ', 'euc-jp')
-    # lines = df.file2lines(df, file, ' ', 'utf-8')
+    lines = df.file2lines(df, file, ' ', encoding)
     dev_sents.extend(df.lines2sents(df, lines))
 
 for sent in dev_sents:
@@ -73,11 +69,10 @@ params["R_bemb_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
 
 
 params["R_bi_b"] = pc.add_parameters((2, HIDDEN_DIM * 2))
-# params["R_bi_b"] = pc.add_parameters((2, INPUT_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
 
 # params["R_bunsetsu_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2 + 1))
-params["R_bunsetsu_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
+params["R_bunsetsu_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2 + biaffine_bias_y, HIDDEN_DIM * 2 + biaffine_bias_x))
 
 
 def linear_interpolation(bias, R, inputs):
@@ -85,7 +80,6 @@ def linear_interpolation(bias, R, inputs):
     for i in range(len(inputs)):
         ret += R * inputs[i]
     return ret
-
 
 
 def do_one_sentence(l2rlstm, r2llstm, char_seq, bipos_seq):
@@ -204,7 +198,7 @@ def dep_bunsetsu(bembs):
     bembs = dy.concatenate(bembs, 1)
     input_size = HIDDEN_DIM * 2
 
-    blin = bilinear(bembs, R_bunsetsu_biaffine, bembs, input_size, slen, 1, 1, False, False)
+    blin = bilinear(bembs, R_bunsetsu_biaffine, bembs, input_size, slen, 1, 1, biaffine_bias_x, biaffine_bias_y)
     arc_loss = dy.reshape(blin, (slen,), slen)
 
     arc_preds = blin.npvalue().argmax(0)
@@ -213,12 +207,12 @@ def dep_bunsetsu(bembs):
 
 
 def bunsetsu_range(bi_bunsetsu_seq):
-    ret = []
-    start = 0
+    ret = [(0, 1)]
+    start = 1
 
-    for i in range(1, len(bi_bunsetsu_seq)):
+    for i in range(2, len(bi_bunsetsu_seq) - 1):
         if bi_bunsetsu_seq[i] == 0:
-            end = i - 1
+            end = i
             ret.append((start, end))
             start = i
 
@@ -227,15 +221,17 @@ def bunsetsu_range(bi_bunsetsu_seq):
 
 def bunsetsu_embds(lstmout, bipos_seq, bunsetsu_ranges):
     ret = []
-    # lp_c = dy.parameter(params["lp_c"])
+
     R_bemb = dy.parameter(params["R_bemb"])
     R_bemb_bias = dy.parameter(params["R_bemb_bias"])
 
     # ret.append(lp_c[wd.x2i["ROOT"]])
 
     for br in bunsetsu_ranges:
-        # ret.append(linear_interpolation(R_bemb_bias, R_bemb, lstmout[br[0]: br[1]] + bipos_seq[br[0]: br[1]]))
-        ret.append(linear_interpolation(R_bemb_bias, R_bemb, [dy.concatenate([l, b]) for l, b in zip(lstmout[br[0]: br[1]], bipos_seq[br[0]: br[1]])]))
+        if LINEAR_INTERPOLATION:
+            ret.append(linear_interpolation(R_bemb_bias, R_bemb, [dy.concatenate([l, b]) for l, b in zip(lstmout[br[0]: br[1]], bipos_seq[br[0]: br[1]])]))
+        else:
+            ret.append(dy.esum([R_bemb * dy.concatenate([l, b]) for l, b in zip(lstmout[br[0]: br[1]], bipos_seq[br[0]: br[1]])]))
 
     return ret
 
@@ -270,7 +266,7 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
     lp_bp = params["lp_bp"]
 
     for it in range(train_iter):
-        # dy.renew_cg()
+        print("iteration: ", it)
         for i in (range(len(char_seqs))):
             if i % batch_size == 0:
                 losses = []
@@ -279,8 +275,9 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
 
                 dy.renew_cg()
 
-            # idx = i if not TRAIN else np.random.randint(len(char_seqs))
-            idx = i
+            if random_pickup:  idx = i if not TRAIN else np.random.randint(len(char_seqs))
+            else: idx = i
+
             if len(char_seqs[idx]) == 0 or len(bi_b_seqs[idx]) == 0:
                 continue
             loss, _, _, _, lstmout = do_one_sentence(l2rlstm, r2llstm, char_seqs[idx], bipos_seqs[idx])
@@ -409,6 +406,7 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
 
 
 for e in range(epoc):
+    print("epoc: ", e)
     TRAIN = True
     train(l2rlstm, r2llstm, train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs)
     TRAIN = False
