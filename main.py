@@ -11,6 +11,8 @@ files = glob.glob(path2KTC + 'syn/*.*')
 # files = [path2KTC + 'syn/9501ED.KNP']
 if JOS: files = glob.glob(path2KTC + 'just-one-sentence.txt')
 
+save_file = 'Bunsetsu-parser-KTC' + '_LAYERS' + str(LAYERS) + '_HIDDEN_DIM' + str(HIDDEN_DIM) + '_INPUT_DIM' + str(INPUT_DIM) + '_LI-False'
+
 print(files)
 
 df = DataFrameKtc
@@ -412,5 +414,7 @@ for e in range(epoc):
     print("epoc: ", e)
     TRAIN = True
     train(l2rlstm, r2llstm, train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs)
+    pc.save(save_file)
+    print("saved into: ", save_file)
     TRAIN = False
     dev(l2rlstm, r2llstm, dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs)
