@@ -59,8 +59,8 @@ pc = dy.ParameterCollection()
 l2rlstm = dy.LSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 r2llstm = dy.LSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 
-l2rlstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, INPUT_DIM, HIDDEN_DIM, pc)
-r2llstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, INPUT_DIM, HIDDEN_DIM, pc)
+l2rlstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+r2llstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 
 
 params = {}
@@ -337,6 +337,7 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
 
             bunsetsu_ranges = bunsetsu_range(bi_b_seqs[idx])
             bembs = bunsetsu_embds(lstmout, [lp_bp[bp] for bp in bipos_seqs[idx]], bunsetsu_ranges)
+            bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs)
             arc_loss, arc_preds = dep_bunsetsu(bembs)
 
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
@@ -414,6 +415,7 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
 
         bunsetsu_ranges = bunsetsu_range(bi_b_seqs[i])
         bembs = bunsetsu_embds(lstmout, [lp_bp[bp] for bp in bipos_seqs[i]], bunsetsu_ranges)
+        bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs)
         arc_loss, arc_preds = dep_bunsetsu(bembs)
 
 
