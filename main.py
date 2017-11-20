@@ -61,6 +61,11 @@ pc = dy.ParameterCollection()
 l2rlstm = dy.LSTMBuilder(LAYERS, INPUT_DIM, HIDDEN_DIM, pc)
 r2llstm = dy.LSTMBuilder(LAYERS, INPUT_DIM, HIDDEN_DIM, pc)
 
+l2rlstm_bunsetsu = dy.LSTMBuilder(1, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+r2llstm_bunsetsu = dy.LSTMBuilder(1, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+
+
+
 params = {}
 params["lp_c"] = pc.add_lookup_parameters((VOCAB_SIZE + 1, INPUT_DIM))
 params["lp_bp"] = pc.add_lookup_parameters((VOCAB_SIZE + 1, INPUT_DIM))
@@ -70,6 +75,9 @@ params["bias"] = pc.add_parameters((BIPOS_SIZE))
 
 params["R_bemb"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2 + INPUT_DIM))
 params["R_bemb_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
+
+params["R_bemb_lstm"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2 + INPUT_DIM))
+params["R_bemb_lstm_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
 
 
 params["R_bi_b"] = pc.add_parameters((2, HIDDEN_DIM * 2))
@@ -86,6 +94,22 @@ def linear_interpolation(bias, R, inputs):
         ret += R * inputs[i]
     return ret
 
+
+
+def inputs2lstmouts(l2rlstm, r2llstm, inputs):
+
+    # dy.renew_cg()
+    s_l2r_0 = l2rlstm.initial_state()
+    s_r2l_0 = r2llstm.initial_state()
+
+    s_l2r = s_l2r_0
+    s_r2l = s_r2l_0
+
+    l2r_outs = s_l2r.add_inputs(inputs)
+    r2l_outs = s_r2l.add_inputs(reversed(inputs))
+    lstm_outs = [dy.concatenate([l2r_outs[i].output(), r2l_outs[i].output()]) for i in range(len(l2r_outs))]
+
+    return lstm_outs
 
 
 def do_one_sentence(l2rlstm, r2llstm, char_seq, bipos_seq):
@@ -318,6 +342,7 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
 
             bunsetsu_ranges = bunsetsu_range(bi_b_seqs[idx])
             bembs = bunsetsu_embds(lstmout, [lp_bp[bp] for bp in bipos_seqs[idx]], bunsetsu_ranges)
+            bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs)
             arc_loss, arc_preds = dep_bunsetsu(bembs)
 
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
@@ -326,8 +351,6 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
             if i % batch_size == 0 and i != 0:
                 # loss_bi_b_value = loss_bi_b.value()
                 # loss_bi_b.backward()
-                print(arc_preds)
-                print(train_chunk_deps[idx])
                 losses_arcs.extend(losses)
                 losses_arcs.extend(losses_bunsetsu)
 
@@ -342,6 +365,9 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
                 # print(loss_bi_b_value)
                 print(i, " arcs loss")
                 print(sum_losses_arcs_value)
+                print(arc_preds)
+                print(train_chunk_deps[idx])
+
 
 
 
@@ -392,6 +418,7 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
 
         bunsetsu_ranges = bunsetsu_range(bi_b_seqs[i])
         bembs = bunsetsu_embds(lstmout, [lp_bp[bp] for bp in bipos_seqs[i]], bunsetsu_ranges)
+        bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs)
         arc_loss, arc_preds = dep_bunsetsu(bembs)
 
 
