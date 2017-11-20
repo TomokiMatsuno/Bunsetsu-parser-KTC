@@ -8,7 +8,8 @@ from file_reader import DataFrameKtc
 
 
 files = glob.glob(path2KTC + 'syn/*.*')
-#files = [path2KTC + 'syn/9501ED.KNP']
+# files = [path2KTC + 'syn/9501ED.KNP']
+# files = glob.glob(path2KTC + 'just-one-sentence.txt')
 
 print(path2UD)
 
@@ -20,6 +21,7 @@ train_sents = []
 for file in files[0:-1]:
     print('[train] reading this file: ', file)
     lines = df.file2lines(df, file, ' ', 'euc-jp')
+    # lines = df.file2lines(df, file, ' ', 'utf-8')
     train_sents.extend(df.lines2sents(df, lines))
 wd, cd, bpd = df.sents2dicts(df, train_sents)
 
@@ -31,6 +33,7 @@ dev_sents = []
 for file in files[-1:]:
     print('[dev] reading this file: ', file)
     lines = df.file2lines(df, file, ' ', 'euc-jp')
+    # lines = df.file2lines(df, file, ' ', 'utf-8')
     dev_sents.extend(df.lines2sents(df, lines))
 
 for sent in dev_sents:
@@ -286,7 +289,7 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
             if(i % batch_size == 0) and i != 0:
                 loss_value = loss.value()
                 # dy.esum(losses)
-                loss.backward()
+                # loss.backward()
                 # trainer.update()
             if i % show_loss_every == 0 and i != 0:
                 print(i, " bipos loss")
@@ -305,8 +308,8 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
                 # loss_bi_b.backward()
                 loss_bi_bunsetsu_value = loss_bi_bunsetsu.value()
 
-                loss_bi_bunsetsu.backward()
-                trainer.update()
+                # loss_bi_bunsetsu.backward()
+                # trainer.update()
             if i % show_loss_every == 0 and i != 0:
                 # print(i, " bi_b loss")
                 # print(loss_bi_b_value)
@@ -323,8 +326,10 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
             if i % batch_size == 0 and i != 0:
                 # loss_bi_b_value = loss_bi_b.value()
                 # loss_bi_b.backward()
-#                losses_arcs.extend(losses)
-#                losses_arcs.extend(losses_bunsetsu)
+                print(arc_preds)
+                print(train_chunk_deps[idx])
+                losses_arcs.extend(losses)
+                losses_arcs.extend(losses_bunsetsu)
 
                 sum_losses_arcs = dy.esum(losses_arcs)
                 sum_losses_arcs_value = sum_losses_arcs.value()
