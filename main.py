@@ -17,7 +17,7 @@ print(files)
 df = DataFrameKtc
 
 train_sents = []
-for file in files[0:1]:
+for file in files[0:-1]:
     print('[train] reading this file: ', file)
     lines = df.file2lines(df, file, ' ', 'euc-jp')
     train_sents.extend(df.lines2sents(df, lines))
