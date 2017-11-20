@@ -9,14 +9,14 @@ from file_reader import DataFrameKtc
 
 files = glob.glob(path2KTC + 'syn/*.*')
 # files = [path2KTC + 'syn/9501ED.KNP']
-# files = glob.glob(path2KTC + 'just-one-sentence.txt')
+if JOS: files = glob.glob(path2KTC + 'just-one-sentence.txt')
 
 print(files)
 
 df = DataFrameKtc
 
 train_sents = []
-for file in files[0:1]:
+for file in files[0:-1]:
     print('[train] reading this file: ', file)
     lines = df.file2lines(df, file, ' ', encoding)
     train_sents.extend(df.lines2sents(df, lines))
@@ -210,7 +210,7 @@ def bunsetsu_range(bi_bunsetsu_seq):
     ret = [(0, 1)]
     start = 1
 
-    for i in range(2, len(bi_bunsetsu_seq) - 1):
+    for i in range(2, len(bi_bunsetsu_seq)):
         if bi_bunsetsu_seq[i] == 0:
             end = i
             ret.append((start, end))
@@ -323,8 +323,7 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
             if i % batch_size == 0 and i != 0:
                 # loss_bi_b_value = loss_bi_b.value()
                 # loss_bi_b.backward()
-                print(arc_preds)
-                print(train_chunk_deps[idx])
+
                 losses_arcs.extend(losses)
                 losses_arcs.extend(losses_bunsetsu)
 
@@ -337,8 +336,12 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
             if i % show_loss_every == 0 and i != 0:
                 # print(i, " bi_b loss")
                 # print(loss_bi_b_value)
+
                 print(i, " arcs loss")
                 print(sum_losses_arcs_value)
+
+                print(arc_preds)
+                print(train_chunk_deps[idx])
 
 
 
