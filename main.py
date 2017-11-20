@@ -11,7 +11,7 @@ files = glob.glob(path2KTC + 'syn/*.*')
 # files = [path2KTC + 'syn/9501ED.KNP']
 if JOS: files = glob.glob(path2KTC + 'just-one-sentence.txt')
 
-save_file = 'Bunsetsu-parser-KTC' + '_LAYERS' + str(LAYERS) + '_HIDDEN_DIM' + str(HIDDEN_DIM) + '_INPUT_DIM' + str(INPUT_DIM) + '_LI-False'
+save_file = 'Bunsetsu-parser-KTC' + '_LAYERS-character' + str(LAYERS_character) + '_LAYERS-bunsetsu' + str(LAYERS_bunsetsu) + '_HIDDEN_DIM' + str(HIDDEN_DIM) + '_INPUT_DIM' + str(INPUT_DIM) + '_LI-False'
 
 print(files)
 
@@ -56,8 +56,12 @@ BIPOS_SIZE = len(bpd.i2x) + 1
 
 pc = dy.ParameterCollection()
 
-l2rlstm = dy.LSTMBuilder(LAYERS, INPUT_DIM, HIDDEN_DIM, pc)
-r2llstm = dy.LSTMBuilder(LAYERS, INPUT_DIM, HIDDEN_DIM, pc)
+l2rlstm = dy.LSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
+r2llstm = dy.LSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
+
+l2rlstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, INPUT_DIM, HIDDEN_DIM, pc)
+r2llstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, INPUT_DIM, HIDDEN_DIM, pc)
+
 
 params = {}
 params["lp_c"] = pc.add_lookup_parameters((VOCAB_SIZE + 1, INPUT_DIM))
@@ -82,6 +86,22 @@ def linear_interpolation(bias, R, inputs):
     for i in range(len(inputs)):
         ret += R * inputs[i]
     return ret
+
+
+def inputs2lstmouts(l2rlstm, r2llstm, inputs):
+
+    s_l2r_0 = l2rlstm.initial_state()
+    s_r2l_0 = r2llstm.initial_state()
+
+    s_l2r = s_l2r_0
+    s_r2l = s_r2l_0
+
+    l2r_outs = s_l2r.add_inputs(inputs)
+    r2l_outs = s_r2l.add_inputs(reversed(inputs))
+    lstm_outs = [dy.concatenate([l2r_outs[i].output(), r2l_outs[i].output()]) for i in range(len(l2r_outs))]
+
+    return lstm_outs
+
 
 
 def do_one_sentence(l2rlstm, r2llstm, char_seq, bipos_seq):
