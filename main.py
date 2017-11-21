@@ -421,7 +421,10 @@ def dev_bunsetsu_embds(bunsetsu_ranges, word_ranges, char_seq, bipos_seq, lstmou
         tmp_lstmout = dy.esum(tmp_lstmout)
         if len(br2lpw[br]) != 0:
             tmp_lps = dy.esum(tmp_lps + br2lpw[br])
+        else:
+            tmp_lps = dy.esum(tmp_lps)
         bembs.append(R_bemb_dev * dy.concatenate([tmp_lstmout, tmp_lps]))
+
 
     for bemb in bembs:
         if LINEAR_INTERPOLATION:
@@ -615,6 +618,11 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
 
         bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs)
 
+        if i % show_acc_every == 0 and i != 0:
+            # print(i, " bi_b loss")
+            # print(loss_bi_b_value)
+            print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
+
         num_tot_bunsetsu_dep += len(bembs) - 1
 
         if len(dev_chunk_deps[i]) != len(bembs) - 1:
@@ -625,10 +633,7 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
         num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, dev_chunk_deps[i]))
 
             # dy.renew_cg()
-        if i % show_acc_every == 0 and i != 0:
-            # print(i, " bi_b loss")
-            # print(loss_bi_b_value)
-            print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
+
 
     return
 
