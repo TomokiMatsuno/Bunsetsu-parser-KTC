@@ -1,6 +1,7 @@
 import numpy as np
 import dynet as dy
 import glob
+import time
 
 from config import *
 from paths import *
@@ -8,8 +9,15 @@ from file_reader import DataFrameKtc
 
 
 files = glob.glob(path2KTC + 'syn/*.*')
-files = [path2KTC + 'syn/9501ED.KNP', path2KTC + 'syn/9501ED.KNP']
-if JOS: files = glob.glob(path2KTC + 'just-one-sentence.txt')
+#files = [path2KTC + 'syn/9501ED.KNP', path2KTC + 'syn/9501ED.KNP']
+
+if STANDARD_SPLIT:
+    files = glob.glob(path2KTC + 'syn/95010[1-9].*')
+    
+if JOS:
+    files = glob.glob(path2KTC + 'just-one-sentence.txt')
+    files = [path2KTC + 'just-one-sentence.txt', path2KTC + 'just-one-sentence.txt']
+
 
 save_file = 'Bunsetsu-parser-KTC' + '_LAYERS-character' + str(LAYERS_character) + '_LAYERS-bunsetsu' + str(LAYERS_bunsetsu) + '_HIDDEN_DIM' + str(HIDDEN_DIM) + '_INPUT_DIM' + str(INPUT_DIM) + '_LI-False'
 
@@ -59,8 +67,8 @@ pc = dy.ParameterCollection()
 l2rlstm = dy.LSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 r2llstm = dy.LSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 
-l2rlstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM, HIDDEN_DIM, pc)
-r2llstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM, HIDDEN_DIM, pc)
+l2rlstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
+r2llstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
 
 
 l2rlstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
@@ -75,11 +83,11 @@ params["lp_bp"] = pc.add_lookup_parameters((BIPOS_SIZE + 1, INPUT_DIM))
 params["R"] = pc.add_parameters((BIPOS_SIZE, HIDDEN_DIM * 2))
 params["bias"] = pc.add_parameters((BIPOS_SIZE))
 
-params["R_wemb"] = pc.add_parameters((INPUT_DIM, HIDDEN_DIM * 2 + INPUT_DIM))
+params["R_wemb"] = pc.add_parameters((INPUT_DIM * 2, HIDDEN_DIM * 2 + INPUT_DIM))
 params["R_wemb_bias"] = pc.add_parameters((INPUT_DIM * 2))
 
 
-params["R_bemb"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2 + INPUT_DIM))
+params["R_bemb"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
 params["R_bemb_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
 
 
@@ -273,7 +281,9 @@ def word_range(bipos_seq):
 def word_embds(lstmout, char_seq, bipos_seq, word_ranges):
     ret = []
 
+    lp_c = params["lp_c"]
     lp_w = params["lp_w"]
+    lp_bp = params["lp_bp"]
 
     R_wemb = params["R_wemb"]
     R_wemb_bias = params["R_wemb_bias"]
@@ -281,12 +291,25 @@ def word_embds(lstmout, char_seq, bipos_seq, word_ranges):
     # ret.append(lp_c[wd.x2i["ROOT"]])
 
     for wr in word_ranges:
-        tmp = ""
-        for c in char_seq[wr[0]: wr[1]]:
-            tmp += cd.i2x[c]
+        str = ""
+        tmp_char = []
+        tmp_bipos = []
+        tmp_word = []
 
-        if tmp in wd.x2i:
-            ret.append(lp_w[wd.x2i[tmp]])
+
+        for c in char_seq[wr[0]: wr[1]]:
+            str += cd.i2x[c]
+            tmp_char.append(lp_c[c])
+
+        for bp in bipos_seq[wr[0]: wr[1]]:
+            tmp_bipos.append(bp)
+
+        tmp_bipos = dy.esum(tmp_bipos)
+        tmp_char = dy.esum(tmp_char)
+
+        if str in wd.x2i:
+            tmp_word = dy.esum([tmp_char, lp_w[wd.x2i[str]]])
+            ret.append(dy.concatenate([tmp_word, tmp_bipos]))
         else:
             if LINEAR_INTERPOLATION:
                 ret.append(linear_interpolation(R_wemb_bias, R_wemb, [dy.concatenate([l, b]) for l, b in zip(lstmout[wr[0]: wr[1]], bipos_seq[wr[0]: wr[1]])]))
@@ -349,7 +372,7 @@ def bilinear(x, W, y, input_size, seq_len_x, seq_len_y, batch_size, num_outputs=
 
 
 def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
-    trainer = dy.SimpleSGDTrainer(pc)
+    trainer = dy.AdadeltaTrainer(pc)
     losses = []
     losses_bunsetsu = []
     losses_arcs = []
@@ -501,7 +524,7 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
         bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs)
         arc_loss, arc_preds = dep_bunsetsu(bembs)
 
-        num_tot_bunsetsu_dep += len(bembs)
+        num_tot_bunsetsu_dep += len(bembs) - 1
         num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, dev_chunk_deps[i]))
 
             # dy.renew_cg()
@@ -513,12 +536,16 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
 
     return
 
+prev = time.time()
 
 for e in range(epoc):
+    prev = time.time() - prev
+    print("time: ", prev)
     print("epoc: ", e)
     TRAIN = True
     train(l2rlstm, r2llstm, train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs)
-    pc.save(save_file)
-    print("saved into: ", save_file)
+    if SAVE:
+        pc.save(save_file)
+        print("saved into: ", save_file)
     TRAIN = False
     dev(l2rlstm, r2llstm, dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs)
