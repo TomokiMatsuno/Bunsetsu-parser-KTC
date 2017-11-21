@@ -285,8 +285,8 @@ def word_embds(lstmout, char_seq, bipos_seq, word_ranges):
     lp_w = params["lp_w"]
     lp_bp = params["lp_bp"]
 
-    R_wemb = params["R_wemb"]
-    R_wemb_bias = params["R_wemb_bias"]
+    R_wemb = dy.parameter(params["R_wemb"])
+    R_wemb_bias = dy.parameter(params["R_wemb_bias"])
 
     # ret.append(lp_c[wd.x2i["ROOT"]])
 
