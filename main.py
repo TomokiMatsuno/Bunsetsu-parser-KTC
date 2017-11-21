@@ -570,6 +570,7 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
 
 
     for i in range(len(char_seqs)):
+        dy.renew_cg()
         if(len(char_seqs[i]) == 0):
             continue
 
@@ -628,7 +629,6 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs):
             # print(i, " bi_b loss")
             # print(loss_bi_b_value)
             print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
-        dy.renew_cg()
 
     return
 
