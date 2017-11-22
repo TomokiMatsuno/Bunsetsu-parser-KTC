@@ -215,30 +215,41 @@ class DataFrameKtc(DataFrame):
         doc_char_forms = []
         doc_word_biposes = []
         doc_chunk_bis = []
+        doc_pos = []
 
         for sent in sents:
             doc_word_forms.append(sent.word_forms)
             doc_char_forms.append(sent.char_forms)
             doc_word_biposes.append(sent.word_biposes)
             doc_chunk_bis.append(sent.chunk_bis)
+
+            poss = []
+            for bp in sent.word_biposes:
+                poss.append(bp[2:])
+            doc_pos.append(poss)
+
         if initial_entries is None:
             initial_entries = ["NULL", "UNK", "ROOT"]
         wd = Dict(doc_word_forms, initial_entries)
         cd = Dict(doc_char_forms, initial_entries)
         bpd = Dict(doc_word_biposes, ["NULL", "B_ROOT"])
+        td = Dict(doc_pos, initial_entries)
 
-        return wd, cd, bpd
+        return wd, cd, bpd, td
 
 
     def sents2ids(dicts, sents):
         wd = dicts[0]
         cd = dicts[1]
         bpd = dicts[2]
+        td = dicts[3]
         word_seqs = []
         char_seqs = []
         word_bipos_seqs = []
         chunk_bi_seqs = []
         chunk_deps = []
+        pos_seqs = []
+        bi_seqs = []
 
 
         for sent in sents:
@@ -247,11 +258,15 @@ class DataFrameKtc(DataFrame):
             tmp_word_bipos = []
             tmp_chunk_bi = []
             tmp_chunk_dep = []
+            tmp_pos = []
+            tmp_bi = []
 
             tmp_word.append(wd.x2i["ROOT"])
             tmp_char.append(cd.x2i["ROOT"])
             tmp_word_bipos.append(bpd.x2i["B_ROOT"])
             tmp_chunk_bi.append(0)
+            tmp_pos.append(td.x2i["ROOT"])
+            tmp_bi.append(0)
             # tmp_chunk_dep.append(0)
 
             for wf in sent.word_forms:
@@ -260,6 +275,8 @@ class DataFrameKtc(DataFrame):
                 tmp_char.append(cd.x2i[cf])
             for bp in sent.word_biposes:
                 tmp_word_bipos.append(bpd.x2i[bp])
+                tmp_pos.append(td.x2i[bp[2:]])
+                tmp_bi.append(0 if bp[0] == 'B' else 1)
             for cbi in sent.chunk_bis:
                 tmp_chunk_bi.append(0 if cbi == 'B' else 1)
             for ch in sent.chunks:
@@ -270,6 +287,8 @@ class DataFrameKtc(DataFrame):
             word_bipos_seqs.append(tmp_word_bipos)
             chunk_bi_seqs.append(tmp_chunk_bi)
             chunk_deps.append(tmp_chunk_dep)
+            pos_seqs.append(tmp_pos)
+            bi_seqs.append(tmp_bi)
 
-        return word_seqs, char_seqs, word_bipos_seqs, chunk_bi_seqs, chunk_deps
+        return word_seqs, char_seqs, word_bipos_seqs, chunk_bi_seqs, chunk_deps, pos_seqs, bi_seqs
 
