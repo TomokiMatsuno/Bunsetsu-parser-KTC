@@ -130,7 +130,7 @@ def inputs2lstmouts(l2rlstm, r2llstm, inputs):
     r2l_outs = s_r2l.add_inputs(reversed(inputs))
     lstm_outs = [dy.concatenate([l2r_outs[i].output(), r2l_outs[i].output()]) for i in range(len(l2r_outs))]
 
-    return lstm_outs
+    return dy.dropout(lstm_outs, pdrop)
 
 
 def char_embds(l2rlstm, r2llstm, char_seq):
@@ -207,8 +207,8 @@ def dep_bunsetsu(bembs):
     slen_x = len(bembs) - 1
     slen_y = slen_x + 1
     # bembs = [lp_c[cd.x2i["ROOT"]]] + bembs
-    bembs_dep = dy.concatenate(bembs[1:], 1)
-    bembs_head = dy.concatenate(bembs, 1)
+    bembs_dep = dy.dropout(dy.concatenate(bembs[1:], 1), pdrop)
+    bembs_head = dy.dropout(dy.concatenate(bembs, 1), pdrop)
     input_size = HIDDEN_DIM * 2
 
     bembs_dep = dep_MLP * bembs_dep + dep_MLP_bias
@@ -578,9 +578,12 @@ for e in range(epoc):
     print("time: ", prev)
     print("epoc: ", e)
     TRAIN = True
+    global pdrop
+    pdrop = 0.33
     train(l2rlstm, r2llstm, train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs, train_pos_seqs)
     if SAVE:
         pc.save(save_file)
         print("saved into: ", save_file)
+    pdrop = 0.0
     TRAIN = False
     dev(l2rlstm, r2llstm, dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs, dev_pos_seqs)
