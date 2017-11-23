@@ -73,12 +73,11 @@ r2llstm = dy.LSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 l2rlstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
 r2llstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
 
-# l2rlstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2 + INPUT_DIM, HIDDEN_DIM, pc)
-# r2llstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2 + INPUT_DIM, HIDDEN_DIM, pc)
+# l2rlstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+# r2llstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 
-l2rlstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
-r2llstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
-
+l2rlstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+r2llstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 
 
 params = {}
@@ -102,6 +101,13 @@ params["R_bi_b"] = pc.add_parameters((2, HIDDEN_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
 
 # params["R_bunsetsu_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2 + 1))
+
+params["head_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
+params["head_MLP_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
+
+params["dep_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
+params["dep_MLP_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
+
 params["R_bunsetsu_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2 + biaffine_bias_y, HIDDEN_DIM * 2 + biaffine_bias_x))
 
 
@@ -191,6 +197,12 @@ def bi_bunsetsu_wembs(wembs, bi_w_seq):
 
 def dep_bunsetsu(bembs):
     # lp_c = params["lp_c"]
+    dep_MLP = dy.parameter(params["dep_MLP"])
+    dep_MLP_bias = dy.parameter(params["dep_MLP_bias"])
+    head_MLP = dy.parameter(params["head_MLP"])
+    head_MLP_bias = dy.parameter(params["head_MLP_bias"])
+
+
     R_bunsetsu_biaffine = dy.parameter(params["R_bunsetsu_biaffine"])
     slen_x = len(bembs) - 1
     slen_y = slen_x + 1
@@ -198,6 +210,9 @@ def dep_bunsetsu(bembs):
     bembs_dep = dy.concatenate(bembs[1:], 1)
     bembs_head = dy.concatenate(bembs, 1)
     input_size = HIDDEN_DIM * 2
+
+    bembs_dep = dep_MLP * bembs_dep + dep_MLP_bias
+    bembs_head = head_MLP * bembs_head + head_MLP_bias
 
     blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_head, input_size, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
     arc_loss = dy.reshape(blin, (slen_y,), slen_x)
@@ -509,7 +524,8 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs, pos_seqs):
 
         # bunsetsu_ranges = bunsetsu_range(bi_b_seqs[i])
         bunsetsu_ranges = bunsetsu_range(preds_bi_b)
-        bembs = bunsetsu_embds(preds_bi_b, wembs)
+        # bembs = bunsetsu_embds(preds_bi_b, wembs)
+        bembs = bunsetsu_embds(bi_w_seq, wembs)
 
         bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs)
 
