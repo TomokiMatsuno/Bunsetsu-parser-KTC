@@ -391,10 +391,14 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs, pos_seqs):
 
     tot_loss_in_iter = 0
 
+
+
     for it in range(train_iter):
         print("total loss in previous iteration: ", tot_loss_in_iter)
         tot_loss_in_iter = 0
         print("iteration: ", it)
+        num_tot_bunsetsu_dep = 0
+        num_tot_cor_bunsetsu_dep = 0
 
         for i in (range(len(char_seqs))):
             if i % batch_size == 0:
@@ -446,6 +450,10 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs, pos_seqs):
             bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs)
             arc_loss, arc_preds = dep_bunsetsu(bembs)
 
+            num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, train_chunk_deps[idx]))
+
+            num_tot_bunsetsu_dep += len(bembs) - 1
+
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
 
             if i % batch_size == 0 and i != 0:
@@ -464,6 +472,8 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs, pos_seqs):
 
                 print(arc_preds)
                 print(train_chunk_deps[idx])
+
+                print("dep accuracy: ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
 
 
 def word_bi(bi_w_seq, bi_b_seq):
