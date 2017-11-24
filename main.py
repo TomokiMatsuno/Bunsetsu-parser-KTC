@@ -19,8 +19,19 @@ if JOS:
     files = [path2KTC + 'just-one-sentence.txt', path2KTC + 'just-one-sentence.txt']
 
 
-save_file = 'Bunsetsu-parser-KTC' + '_LAYERS-character' + str(LAYERS_character) + '_LAYERS-bunsetsu' + str(LAYERS_bunsetsu) + '_HIDDEN_DIM' + str(HIDDEN_DIM) + '_INPUT_DIM' + str(INPUT_DIM) + '_LI-False'
-load_file = 'Bunsetsu-parser-KTC' + '_LAYERS-character' + str(LAYERS_character) + '_LAYERS-bunsetsu' + str(LAYERS_bunsetsu) + '_HIDDEN_DIM' + str(HIDDEN_DIM) + '_INPUT_DIM' + str(INPUT_DIM) + '_LI-False'
+save_file = 'Bunsetsu-parser-KTC' + \
+            '_LAYERS-character' + str(LAYERS_character) + \
+            '_LAYERS-word' + str(LAYERS_word) + \
+            '_LAYERS-bunsetsu' + str(LAYERS_bunsetsu) + \
+            '_HIDDEN-DIM' + str(HIDDEN_DIM) + \
+            '_INPUT-DIM' + str(INPUT_DIM) + \
+            '_batch-size' + str(batch_size) + \
+            '_learning-rate' + str(learning_rate) + \
+            '_pdrop' + str(pdrop)
+
+load_file = save_file
+
+
 print(files)
 
 df = DataFrameKtc
@@ -82,15 +93,6 @@ params["lp_w"] = pc.add_lookup_parameters((WORDS_SIZE + 1, INPUT_DIM))
 params["lp_c"] = pc.add_lookup_parameters((CHARS_SIZE + 1, INPUT_DIM))
 params["lp_p"] = pc.add_lookup_parameters((POS_SIZE + 1, INPUT_DIM))
 params["lp_bp"] = pc.add_lookup_parameters((BIPOS_SIZE + 1, INPUT_DIM))
-
-
-
-params["R"] = pc.add_parameters((BIPOS_SIZE, HIDDEN_DIM * 2))
-params["bias"] = pc.add_parameters((BIPOS_SIZE))
-
-params["R_bemb"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
-params["R_bemb_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
-
 
 params["R_bi_b"] = pc.add_parameters((2, HIDDEN_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
