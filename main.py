@@ -70,8 +70,8 @@ pc = dy.ParameterCollection()
 l2rlstm = dy.LSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 r2llstm = dy.LSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 
-l2rlstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
-r2llstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
+l2rlstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+r2llstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 
 # l2rlstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 # r2llstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
@@ -89,7 +89,7 @@ params["lp_p"] = pc.add_lookup_parameters((POS_SIZE + 1, INPUT_DIM))
 params["R"] = pc.add_parameters((BIPOS_SIZE, HIDDEN_DIM * 2))
 params["bias"] = pc.add_parameters((BIPOS_SIZE))
 
-params["R_wemb"] = pc.add_parameters((INPUT_DIM * 2, HIDDEN_DIM * 2 + INPUT_DIM))
+params["R_wemb"] = pc.add_parameters((INPUT_DIM * 2, HIDDEN_DIM * 2))
 params["R_wemb_bias"] = pc.add_parameters((INPUT_DIM * 2))
 
 
@@ -288,7 +288,7 @@ def word_embds(lstmout, char_seq, pos_seq, word_ranges):
         if str in wd.x2i:
             tmp_word = dy.esum([lp_w[wd.x2i[str]], tmp_pos])
             # ret.append(dy.concatenate([tmp_word, tmp_bipos]))
-            ret.append((dy.esum([dy.esum([R_wemb * l for l in lstmout[wr[0]: wr[1]]]), tmp_word])))
+            ret.append((dy.concatenate([dy.esum([R_wemb * l for l in lstmout[wr[0]: wr[1]]]), tmp_word])))
             # ret.append(dy.concatenate([tmp_word, tmp_pos]))
         else:
             tmp_word = dy.esum([tmp_char, tmp_pos])
@@ -297,7 +297,7 @@ def word_embds(lstmout, char_seq, pos_seq, word_ranges):
                 ret.append(linear_interpolation(R_wemb_bias, R_wemb, [dy.concatenate([l, lp_p[b]]) for l, b in zip(lstmout[wr[0]: wr[1]], pos_seq[wr[0]: wr[1]])]))
             else:
                 # ret.append(dy.esum([R_wemb * dy.concatenate([l, b]) for l, b in zip(lstmout[wr[0]: wr[1]], bipos_seq[wr[0]: wr[1]])]))
-                ret.append((dy.esum([dy.esum([R_wemb * l for l in lstmout[wr[0]: wr[1]]]), tmp_word])))
+                ret.append((dy.concatenate([dy.esum([R_wemb * l for l in lstmout[wr[0]: wr[1]]]), tmp_word])))
 
     return ret
 
@@ -332,38 +332,6 @@ def bunsetsu_embds(bi_w_seq, wembs):
             ret.append(dy.esum(bemb))
 
     return ret
-
-
-# def bunsetsu_embds(word_ranges, bunsetsu_ranges, wembs):
-#     ret = []
-#
-#     lp_w = params["lp_w"]
-#     # lp_bp = params["lp_bp"]
-#     R_bemb = dy.parameter(params["R_bemb"])
-#     R_bemb_bias = dy.parameter(params["R_bemb_bias"])
-#
-#     # ret.append(lp_c[wd.x2i["ROOT"]])
-#
-#     bembs = []
-#     widx = 0
-#
-#
-#     for br in bunsetsu_ranges:
-#         tmp = []
-#         while widx < len(word_ranges) and word_ranges[widx][1] <= br[1]:
-#             tmp.append(wembs[widx])
-#             widx += 1
-#         if len(tmp) == 0:
-#             continue
-#         bembs.append(tmp)
-#
-#     for bemb in bembs:
-#         if LINEAR_INTERPOLATION:
-#             ret.append(linear_interpolation(R_bemb_bias, R_bemb, bemb))
-#         else:
-#             ret.append(dy.esum(bemb))
-#
-#     return ret
 
 
 def bilinear(x, W, y, input_size, seq_len_x, seq_len_y, batch_size, num_outputs=1, bias_x=False, bias_y=False):
