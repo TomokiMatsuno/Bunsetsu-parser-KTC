@@ -286,16 +286,18 @@ def word_embds(lstmout, char_seq, pos_seq, word_ranges):
         tmp_char = dy.esum(tmp_char)
 
         if str in wd.x2i:
-            tmp_word = dy.esum([tmp_char, lp_w[wd.x2i[str]]])
+            tmp_word = dy.esum([lp_w[wd.x2i[str]], tmp_pos])
             # ret.append(dy.concatenate([tmp_word, tmp_bipos]))
-            ret.append(dy.concatenate([tmp_word, tmp_pos]))
+            ret.append((dy.esum([dy.esum([R_wemb * l for l in lstmout[wr[0]: wr[1]]]), tmp_word])))
+            # ret.append(dy.concatenate([tmp_word, tmp_pos]))
         else:
+            tmp_word = dy.esum([tmp_char, tmp_pos])
             if LINEAR_INTERPOLATION:
                 # ret.append(linear_interpolation(R_wemb_bias, R_wemb, [dy.concatenate([l, b]) for l, b in zip(lstmout[wr[0]: wr[1]], bipos_seq[wr[0]: wr[1]])]))
                 ret.append(linear_interpolation(R_wemb_bias, R_wemb, [dy.concatenate([l, lp_p[b]]) for l, b in zip(lstmout[wr[0]: wr[1]], pos_seq[wr[0]: wr[1]])]))
             else:
                 # ret.append(dy.esum([R_wemb * dy.concatenate([l, b]) for l, b in zip(lstmout[wr[0]: wr[1]], bipos_seq[wr[0]: wr[1]])]))
-                ret.append(dy.esum([R_wemb * dy.concatenate([l, lp_p[p]]) for l, p in zip(lstmout[wr[0]: wr[1]], pos_seq[wr[0]: wr[1]])]))
+                ret.append((dy.esum([dy.esum([R_wemb * l for l in lstmout[wr[0]: wr[1]]]), tmp_word])))
 
     return ret
 
@@ -391,7 +393,7 @@ def train(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs, pos_seqs):
 
     tot_loss_in_iter = 0
 
-
+    print(pdrop)
 
     for it in range(train_iter):
         print("total loss in previous iteration: ", tot_loss_in_iter)
@@ -500,6 +502,8 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs, pos_seqs):
 
     complete_chunking = 0
     failed_chunking = 0
+
+    print(pdrop)
 
     for i in range(len(char_seqs)):
         dy.renew_cg()
