@@ -128,9 +128,9 @@ def inputs2lstmouts(l2rlstm, r2llstm, inputs):
 
     l2r_outs = s_l2r.add_inputs(inputs)
     r2l_outs = s_r2l.add_inputs(reversed(inputs))
-    lstm_outs = [dy.concatenate([l2r_outs[i].output(), r2l_outs[i].output()]) for i in range(len(l2r_outs))]
+    lstm_outs = [dy.rectify(dy.dropout(dy.concatenate([l2r_outs[i].output(), r2l_outs[i].output()]), pdrop)) for i in range(len(l2r_outs))]
 
-    return dy.dropout(lstm_outs, pdrop)
+    return lstm_outs
 
 
 def char_embds(l2rlstm, r2llstm, char_seq):
@@ -211,8 +211,8 @@ def dep_bunsetsu(bembs):
     bembs_head = dy.dropout(dy.concatenate(bembs, 1), pdrop)
     input_size = HIDDEN_DIM * 2
 
-    bembs_dep = dep_MLP * bembs_dep + dep_MLP_bias
-    bembs_head = head_MLP * bembs_head + head_MLP_bias
+    bembs_dep = dy.rectify(dep_MLP * bembs_dep + dep_MLP_bias)
+    bembs_head = dy.rectify(head_MLP * bembs_head + head_MLP_bias)
 
     blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_head, input_size, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
     arc_loss = dy.reshape(blin, (slen_y,), slen_x)
@@ -559,11 +559,17 @@ def dev(l2rlstm, r2llstm, char_seqs, bipos_seqs, bi_b_seqs, pos_seqs):
         num_tot_bunsetsu_dep += len(bembs) - 1
 
         num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, dev_chunk_deps[i]))
-
-    print("complete_chunking rate: ", complete_chunking / len(char_seqs))
-    print("failed_chunking rate: ", failed_chunking / len(char_seqs))
-    print("complete chunking: ", complete_chunking)
-    print("failed_chunking: ", failed_chunking)
+    with open("result_accuracy.txt", mode = 'a', encoding = 'utf-8') as f:
+        f.write(str(i) + " accuracy chunking " + str(num_tot_cor_bi_b / num_tot_bi_b) + '\n')
+        f.write(str(i) + " accuracy dep " + str(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)+ '\n')
+        f.write("complete chunking rate: " + str(complete_chunking / len(char_seqs))+ '\n')
+        f.write("failed_chunking rate: " + str(failed_chunking / len(char_seqs))+ '\n')
+        f.write("complete chunking: " + str(complete_chunking)+ '\n')
+        f.write("failed_chunking: " + str(failed_chunking)+ '\n')
+    print("complete_chunking rate: " + str(complete_chunking / len(char_seqs)))
+    print("failed_chunking rate: " + str(failed_chunking / len(char_seqs)))
+    print("complete chunking: " + str(complete_chunking))
+    print("failed_chunking: " + str(failed_chunking))
     return
 
 
@@ -577,6 +583,10 @@ for e in range(epoc):
     prev = time.time() - prev
     print("time: ", prev)
     print("epoc: ", e)
+    with open("result_accuracy.txt", mode = 'a', encoding = 'utf-8') as f:
+        f.write("time: " + str(prev)+ '\n')
+        f.write("epoc: " + str(e)+ '\n')
+
     TRAIN = True
     global pdrop
     pdrop = 0.33
