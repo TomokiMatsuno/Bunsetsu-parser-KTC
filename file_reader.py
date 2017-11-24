@@ -86,7 +86,7 @@ class Word:
 class Chunk:
     def __init__(self, lines):
         self.id = int(lines[0][1])
-        self.head = int(lines[0][2][0:-1]) if int(lines[0][2][0:-1]) >= 0 else 0
+        self.head = int(lines[0][2][0:-1]) + 1#if int(lines[0][2][0:-1]) >= 0 else 0
         self.rel = lines[0][2][-1]
         self.words = []
         chunk_bi = 'B'
