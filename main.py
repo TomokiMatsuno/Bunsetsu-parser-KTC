@@ -263,16 +263,15 @@ def word_embds(cembs, char_seq, word_ranges):
 
         if str in wd.x2i:
             tmp_word = lp_w[wd.x2i[str]]
-            if wr[1] < len(cembs):
-                ret.append((dy.concatenate([cembs[wr[1]] - cembs[wr[0]], tmp_word])))
-            else:
-                ret.append((dy.concatenate([cembs[wr[0]], tmp_word])))
         else:
             tmp_word = tmp_char
-            if wr[1] < len(cembs):
-                ret.append((dy.concatenate([cembs[wr[1]] - cembs[wr[0]], tmp_word])))
-            else:
-                ret.append((dy.concatenate([cembs[wr[0]], tmp_word])))
+
+        if wr[1] < len(cembs):
+            ret.append((dy.concatenate([cembs[wr[1]] - cembs[wr[0]], tmp_word])))
+        elif wr[0] == len(cembs) - 1:
+            ret.append((dy.concatenate([cembs[wr[0]], tmp_word])))
+        else:
+            ret.append((dy.concatenate([cembs[-1] - cembs[wr[0]], tmp_word])))
 
     return ret
 
@@ -283,8 +282,10 @@ def bunsetsu_embds(wembs, bunsetsu_ranges):
     for br in bunsetsu_ranges:
         if br[1] < len(wembs):
             ret.append(wembs[br[1]] - wembs[br[0]])
-        else:
+        elif br[0] == len(wembs) - 1:
             ret.append(wembs[br[0]])
+        else:
+            ret.append(wembs[-1] - wembs[br[0]])
 
     return ret
 
