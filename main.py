@@ -28,7 +28,8 @@ save_file = 'Bunsetsu-parser-KTC' + \
             '_INPUT-DIM' + str(INPUT_DIM) + \
             '_batch-size' + str(batch_size) + \
             '_learning-rate' + str(learning_rate) + \
-            '_pdrop' + str(pdrop)
+            '_pdrop' + str(pdrop) + \
+            '_orthogonal'
 
 load_file = save_file
 
@@ -507,7 +508,7 @@ for e in range(epoc):
 
     TRAIN = True
     global pdrop
-    pdrop = 0.33
+    pdrop = pdrop_stash
     train(train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs)
     if SAVE:
         pc.save(save_file)
