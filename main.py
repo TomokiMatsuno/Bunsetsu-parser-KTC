@@ -1,5 +1,6 @@
 import numpy as np
 import dynet as dy
+from utils import *
 import glob
 import time
 
@@ -78,14 +79,14 @@ POS_SIZE = len(td.i2x) + 1
 
 pc = dy.ParameterCollection()
 
-l2rlstm_char = dy.LSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
-r2llstm_char = dy.LSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
+l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
+r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
 
-l2rlstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
-r2llstm_word = dy.LSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 
-l2rlstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-r2llstm_bunsetsu = dy.LSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 
 
 params = {}
@@ -118,12 +119,15 @@ def inputs2lstmouts(l2rlstm, r2llstm, inputs):
     s_l2r_0 = l2rlstm.initial_state()
     s_r2l_0 = r2llstm.initial_state()
 
+    l2rlstm.set_dropouts(pdrop, pdrop)
+    r2llstm.set_dropouts(pdrop, pdrop)
+
     s_l2r = s_l2r_0
     s_r2l = s_r2l_0
 
     l2r_outs = s_l2r.add_inputs(inputs)
     r2l_outs = s_r2l.add_inputs(reversed(inputs))
-    lstm_outs = [dy.cube(dy.dropout(dy.concatenate([l2r_outs[i].output(), r2l_outs[i].output()]), pdrop)) for i in range(len(l2r_outs))]
+    lstm_outs = [dy.cube(dy.concatenate([l2r_outs[i].output(), r2l_outs[i].output()])) for i in range(len(l2r_outs))]
 
     return lstm_outs
 
@@ -134,6 +138,9 @@ def char_embds(l2rlstm, r2llstm, char_seq, bipos_seq):
 
     lp_c = params["lp_c"]
     lp_bp = params["lp_bp"]
+
+    l2rlstm.set_dropouts(pdrop, pdrop)
+    r2llstm.set_dropouts(pdrop, pdrop)
 
     s_l2r = s_l2r_0
     s_r2l = s_r2l_0
@@ -205,8 +212,8 @@ def dep_bunsetsu(bembs):
     bembs_head = dy.dropout(dy.concatenate(bembs, 1), pdrop)
     input_size = HIDDEN_DIM * 2
 
-    bembs_dep = dy.rectify(dep_MLP * bembs_dep + dep_MLP_bias)
-    bembs_head = dy.rectify(head_MLP * bembs_head + head_MLP_bias)
+    bembs_dep = leaky_relu(dep_MLP * bembs_dep + dep_MLP_bias)
+    bembs_head = leaky_relu(head_MLP * bembs_head + head_MLP_bias)
 
     blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_head, input_size, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
     arc_loss = dy.reshape(blin, (slen_y,), slen_x)
