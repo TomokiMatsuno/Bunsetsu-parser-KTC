@@ -12,6 +12,11 @@ from file_reader import DataFrameKtc
 train_dev_boundary = -1
 files = glob.glob(path2KTC + 'syn/*.*')
 files = glob.glob(path2KTC + 'syn/95010[1-9].*')
+best_acc = 0.0
+update = False
+early_stop_count = 0
+
+
 #files = [path2KTC + 'syn/9501ED.KNP', path2KTC + 'syn/9501ED.KNP']
 
 
@@ -42,6 +47,8 @@ save_file = 'Bunsetsu-parser-KTC' + \
             '_orthogonal'
 
 load_file = save_file
+
+result_file = save_file + "_result_accuracy.txt"
 
 
 print(files)
@@ -551,8 +558,14 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
 
         # num_tot_cor_bunsetsu_dep += np.sum(np.equal(np.equal(arc_preds, dev_chunk_deps[i]), remains))
         num_tot_cor_bunsetsu_dep += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds, dev_chunk_deps[i]))])
+        global best_acc
+        global update
+        if best_acc + 0.001 < num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep:
+            best_acc = num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep
+            update = True
+            early_stop_count = 0
 
-    with open("result_accuracy.txt", mode = 'a', encoding = 'utf-8') as f:
+    with open(result_file, mode='a', encoding='utf-8') as f:
         f.write(str(i) + " accuracy chunking " + str(num_tot_cor_bi_b / num_tot_bi_b) + '\n')
         f.write(str(i) + " accuracy dep " + str(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)+ '\n')
         f.write("complete chunking rate: " + str(complete_chunking / len(char_seqs))+ '\n')
@@ -577,15 +590,16 @@ for e in range(epoc):
     prev = time.time() - prev
     print("time: ", prev)
     print("epoc: ", e)
-    with open("result_accuracy.txt", mode = 'a', encoding = 'utf-8') as f:
-        f.write("time: " + str(prev)+ '\n')
-        f.write("epoc: " + str(e)+ '\n')
+    with open(result_file, mode='a', encoding='utf-8') as f:
+        f.write("time: " + str(prev) + '\n')
+        f.write("epoc: " + str(e) + '\n')
 
     TRAIN = True
     global pdrop
     global pdrop_bunsetsu
     pdrop = pdrop_stash
     pdrop_bunsetsu = pdrop_bunsetsu_stash
+
     train(train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs)
     if SAVE:
         pc.save(save_file)
@@ -593,4 +607,13 @@ for e in range(epoc):
     pdrop = 0.0
     pdrop_bunsetsu = 0.0
     TRAIN = False
+    update = False
+
     dev(dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs)
+
+    if not update:
+        early_stop_count += 1
+
+    if early_stop_count > early_stop:
+        print("best_acc: ", best_acc)
+        break
