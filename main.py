@@ -1,6 +1,7 @@
 import numpy as np
 import dynet as dy
 from utils import *
+from tarjan import *
 import glob
 import time
 
@@ -106,6 +107,7 @@ params["dep_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
 params["dep_MLP_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
 
 params["R_bunsetsu_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2 + biaffine_bias_y, HIDDEN_DIM * 2 + biaffine_bias_x))
+params["R_word_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
 
 
 def linear_interpolation(bias, R, inputs):
@@ -207,9 +209,12 @@ def dep_bunsetsu(bembs):
 
 
     R_bunsetsu_biaffine = dy.parameter(params["R_bunsetsu_biaffine"])
-    slen_x = len(bembs) - 1
-    slen_y = slen_x + 1
-    bembs_dep = dy.dropout(dy.concatenate(bembs[1:], 1), pdrop)
+    # slen_x = len(bembs) - 1
+    slen_x = len(bembs)
+    # slen_y = slen_x + 1
+    slen_y = slen_x
+    # bembs_dep = dy.dropout(dy.concatenate(bembs[1:], 1), pdrop)
+    bembs_dep = dy.dropout(dy.concatenate(bembs, 1), pdrop)
     bembs_head = dy.dropout(dy.concatenate(bembs, 1), pdrop)
     input_size = HIDDEN_DIM * 2
 
@@ -217,9 +222,18 @@ def dep_bunsetsu(bembs):
     bembs_head = leaky_relu(head_MLP * bembs_head + head_MLP_bias)
 
     blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_head, input_size, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
-    arc_loss = dy.reshape(blin, (slen_y,), slen_x)
 
     arc_preds = blin.npvalue().argmax(0)
+    msk = [1] * slen_x
+    # msk[0] = 0
+    arc_probs = blin.npvalue()
+    # arc_probs = arc_probs[1:]
+    arc_probs = np.transpose(arc_probs)
+    arc_preds = arc_argmax(arc_probs, slen_x, msk)
+    arc_preds = arc_preds[1:]
+    arc_loss = dy.reshape(blin, (slen_y,), slen_x)
+    arc_loss = dy.pick_batch_elems(arc_loss, [i for i in range(1, slen_x)])
+
 
     return arc_loss, arc_preds
 
@@ -288,17 +302,32 @@ def word_embds(cembs, char_seq, word_ranges):
 
 def bunsetsu_embds(wembs, bunsetsu_ranges):
     ret = []
+    ret2 = []
+
+
+    R_word_biaffine = dy.parameter(params["R_word_biaffine"])
 
     for br in bunsetsu_ranges:
         if br[1] < len(wembs):
             ret.append(wembs[br[1]] - wembs[br[0]])
+            welms = wembs[br[0]: br[1]]
         elif br[0] == len(wembs) - 1:
             ret.append(wembs[br[0]])
+            welms = [wembs[br[0]]]
         else:
             ret.append(wembs[-1] - wembs[br[0]])
+            welms = wembs[br[0]: br[-1]]
 
-    return ret
+        y = ret[-1]
+        x = dy.concatenate(welms, 1)
+        attention = dy.softmax(dy.transpose(bilinear(x, R_word_biaffine, y, HIDDEN_DIM * 2, len(welms), 1, 1)))
+        bemb = dy.cmult(dy.transpose(attention), x)
+        bemb = dy.sum_dim(bemb, [1])
 
+        ret2.append(bemb)
+
+    return ret2
+    # return ret
 
 def bilinear(x, W, y, input_size, seq_len_x, seq_len_y, batch_size, num_outputs=1, bias_x=False, bias_y=False):
     # x,y: (input_size x seq_len) x batch_size
@@ -425,6 +454,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
 
     complete_chunking = 0
     failed_chunking = 0
+    chunks_excluded = 0
 
     print(pdrop)
 
@@ -451,10 +481,30 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         if i % show_acc_every == 0 and i != 0:
             print("accuracy chunking: ", num_tot_cor_bi_b / num_tot_bi_b)
             print("loss chuncking: ", loss_bi_b.value())
+        gold_bunsetsu_ranges = bunsetsu_range(bi_w_seq)
 
-        bunsetsu_ranges = bunsetsu_range(preds_bi_b)
+        failed_chunk = []
+        for bidx, br in enumerate(gold_bunsetsu_ranges[1:]):
+            start = br[0]
+            end = br[1]
+            if end == len(gold_bunsetsu_ranges):
+                end = - 1
+            if np.sum(np.equal(bi_w_seq[start: end], preds_bi_b[start: end])) != len(bi_w_seq[start: end]):
+                failed_chunk.append(bidx)
 
-        bembs = bunsetsu_embds(wembs, bunsetsu_ranges)
+
+        remains = [True] * len(gold_bunsetsu_ranges)
+        for fc in failed_chunk:
+            remains[fc]
+            dev_chunk_deps[i]
+            chunks_excluded += np.sum(np.equal(dev_chunk_deps[i], fc)) + remains[fc]
+            remains = [r * d for r, d in zip(remains, np.equal(dev_chunk_deps[i], fc))]
+            remains[fc] = False
+
+
+        pred_bunsetsu_ranges = bunsetsu_range(preds_bi_b)
+
+        bembs = bunsetsu_embds(wembs, gold_bunsetsu_ranges)
 
         bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs)
 
@@ -472,12 +522,14 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
 
         if len(dev_chunk_deps[i]) != len(bembs) - 1:
             failed_chunking += 1
-            continue
+            # continue
         arc_loss, arc_preds = dep_bunsetsu(bembs)
 
         num_tot_bunsetsu_dep += len(bembs) - 1
 
-        num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, dev_chunk_deps[i]))
+        # num_tot_cor_bunsetsu_dep += np.sum(np.equal(np.equal(arc_preds, dev_chunk_deps[i]), remains))
+        num_tot_cor_bunsetsu_dep += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds, dev_chunk_deps[i]))])
+
     with open("result_accuracy.txt", mode = 'a', encoding = 'utf-8') as f:
         f.write(str(i) + " accuracy chunking " + str(num_tot_cor_bi_b / num_tot_bi_b) + '\n')
         f.write(str(i) + " accuracy dep " + str(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)+ '\n')
@@ -489,6 +541,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
     print("failed_chunking rate: " + str(failed_chunking / len(char_seqs)))
     print("complete chunking: " + str(complete_chunking))
     print("failed_chunking: " + str(failed_chunking))
+    print("chunks_excluded: ", chunks_excluded)
     return
 
 
