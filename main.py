@@ -9,13 +9,21 @@ from config import *
 from paths import *
 from file_reader import DataFrameKtc
 
-
+train_dev_boundary = -1
 files = glob.glob(path2KTC + 'syn/*.*')
+files = glob.glob(path2KTC + 'syn/95010[1-9].*')
 #files = [path2KTC + 'syn/9501ED.KNP', path2KTC + 'syn/9501ED.KNP']
+
+
 
 if STANDARD_SPLIT:
     files = glob.glob(path2KTC + 'syn/95010[1-9].*')
-    
+    files.extend(glob.glob(path2KTC + 'syn/95011[0-1].*'))
+    files.extend(glob.glob(path2KTC + 'syn/950[1-8]ED.*'))
+    files.extend(glob.glob(path2KTC + 'syn/95011[4-7].*'))
+    files.extend(glob.glob(path2KTC + 'syn/951[0-2]ED.*'))
+    train_dev_boundary = -7
+
 if JOS:
     files = glob.glob(path2KTC + 'just-one-sentence.txt')
     files = [path2KTC + 'just-one-sentence.txt', path2KTC + 'just-one-sentence.txt']
@@ -30,6 +38,7 @@ save_file = 'Bunsetsu-parser-KTC' + \
             '_batch-size' + str(batch_size) + \
             '_learning-rate' + str(learning_rate) + \
             '_pdrop' + str(pdrop) + \
+            '_pdrop_bunsetsu' + str(pdrop_bunsetsu) + \
             '_orthogonal'
 
 load_file = save_file
@@ -40,7 +49,7 @@ print(files)
 df = DataFrameKtc
 
 train_sents = []
-for file in files[0:-1]:
+for file in files[0:train_dev_boundary]:
     print('[train] reading this file: ', file)
     lines = df.file2lines(df, file, ' ', encoding)
     train_sents.extend(df.lines2sents(df, lines))
@@ -52,7 +61,7 @@ bpd.freeze()
 td.freeze()
 
 dev_sents = []
-for file in files[-1:]:
+for file in files[train_dev_boundary:]:
     print('[dev] reading this file: ', file)
     lines = df.file2lines(df, file, ' ', encoding)
     dev_sents.extend(df.lines2sents(df, lines))
@@ -87,6 +96,8 @@ r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, H
 l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 
+# l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+# r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 
@@ -100,13 +111,22 @@ params["lp_bp"] = pc.add_lookup_parameters((BIPOS_SIZE + 1, INPUT_DIM))
 params["R_bi_b"] = pc.add_parameters((2, HIDDEN_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
 
-params["head_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
-params["head_MLP_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
+# params["head_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
+# params["head_MLP_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
+#
+# params["dep_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
+# params["dep_MLP_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
 
-params["dep_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
-params["dep_MLP_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
+params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * 2))
+params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
 
-params["R_bunsetsu_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2 + biaffine_bias_y, HIDDEN_DIM * 2 + biaffine_bias_x))
+params["dep_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * 2))
+params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
+
+# params["R_bunsetsu_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2 + biaffine_bias_y, HIDDEN_DIM * 2 + biaffine_bias_x))
+# params["R_word_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
+
+params["R_bunsetsu_biaffine"] = pc.add_parameters((MLP_HIDDEN_DIM + biaffine_bias_y, MLP_HIDDEN_DIM + biaffine_bias_x))
 params["R_word_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
 
 
@@ -117,7 +137,7 @@ def linear_interpolation(bias, R, inputs):
     return ret
 
 
-def inputs2lstmouts(l2rlstm, r2llstm, inputs):
+def inputs2lstmouts(l2rlstm, r2llstm, inputs, pdrop):
 
     s_l2r_0 = l2rlstm.initial_state()
     s_r2l_0 = r2llstm.initial_state()
@@ -214,8 +234,8 @@ def dep_bunsetsu(bembs):
     # slen_y = slen_x + 1
     slen_y = slen_x
     # bembs_dep = dy.dropout(dy.concatenate(bembs[1:], 1), pdrop)
-    bembs_dep = dy.dropout(dy.concatenate(bembs, 1), pdrop)
-    bembs_head = dy.dropout(dy.concatenate(bembs, 1), pdrop)
+    bembs_dep = dy.dropout(dy.concatenate(bembs, 1), pdrop_bunsetsu)
+    bembs_head = dy.dropout(dy.concatenate(bembs, 1), pdrop_bunsetsu)
     input_size = HIDDEN_DIM * 2
 
     bembs_dep = leaky_relu(dep_MLP * bembs_dep + dep_MLP_bias)
@@ -357,6 +377,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
     tot_loss_in_iter = 0
 
     print(pdrop)
+    print(pdrop_bunsetsu)
 
     for it in range(train_iter):
         print("total loss in previous iteration: ", tot_loss_in_iter)
@@ -385,7 +406,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
             word_ranges = word_range(bipos_seqs[idx])
             wembs = word_embds(cembs, char_seqs[idx], word_ranges)
-            wembs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs)
+            wembs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
             loss_bi_bunsetsu, _, _ = bi_bunsetsu_wembs(wembs, bi_w_seq)
             losses_bunsetsu.append(loss_bi_bunsetsu)
@@ -401,7 +422,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
             bembs = bunsetsu_embds(wembs, bunsetsu_ranges)
 
-            bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs)
+            bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
             arc_loss, arc_preds = dep_bunsetsu(bembs)
 
             num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, train_chunk_deps[idx]))
@@ -457,6 +478,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
     chunks_excluded = 0
 
     print(pdrop)
+    print(pdrop_bunsetsu)
 
     for i in range(len(char_seqs)):
         dy.renew_cg()
@@ -473,7 +495,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         word_ranges = word_range(bipos_seqs[i])
         wembs = word_embds(cembs, char_seqs[i], word_ranges)
 
-        wembs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs)
+        wembs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
         loss_bi_b, preds_bi_b, num_cor_bi_b = bi_bunsetsu_wembs(wembs, bi_w_seq)
         num_tot_bi_b += len(wembs)
@@ -506,7 +528,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
 
         bembs = bunsetsu_embds(wembs, gold_bunsetsu_ranges)
 
-        bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs)
+        bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
 
         if i % show_acc_every == 0 and i != 0:
             loss_bi_b_value = loss_bi_b.value()
@@ -561,11 +583,14 @@ for e in range(epoc):
 
     TRAIN = True
     global pdrop
+    global pdrop_bunsetsu
     pdrop = pdrop_stash
+    pdrop_bunsetsu = pdrop_bunsetsu_stash
     train(train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs)
     if SAVE:
         pc.save(save_file)
         print("saved into: ", save_file)
     pdrop = 0.0
+    pdrop_bunsetsu = 0.0
     TRAIN = False
     dev(dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs)
