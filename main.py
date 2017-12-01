@@ -46,6 +46,12 @@ save_file = 'Bunsetsu-parser-KTC' + \
             '_pdrop_bunsetsu' + str(pdrop_bunsetsu) + \
             '_orthogonal'
 
+if bemb_attention:
+    save_file = save_file + '_bembattn' + '-dropout' + str(pdrop * 2)
+
+if bemb_lstm:
+    save_file = save_file + '_bemblstm'
+
 load_file = save_file
 
 result_file = save_file + "_result_accuracy.txt"
@@ -89,6 +95,12 @@ train_word_seqs, train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs, tr
 
 dev_word_seqs, dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs, dev_chunk_deps, dev_pos_seqs, dev_word_bi_seqs = df.sents2ids([wd, cd, bpd, td], dev_sents)
 
+total_chunks = 0
+for dcd in dev_chunk_deps:
+    total_chunks += len(dcd)
+
+print(total_chunks)
+
 ###Neural Network
 WORDS_SIZE = len(wd.i2x) + 1
 CHARS_SIZE = len(cd.i2x) + 1
@@ -103,10 +115,14 @@ r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, H
 l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 
+l2rlstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+r2llstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+
+if bemb_lstm:
+    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 # l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 # r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 
 
 params = {}
@@ -134,7 +150,7 @@ params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
 # params["R_word_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
 
 params["R_bunsetsu_biaffine"] = pc.add_parameters((MLP_HIDDEN_DIM + biaffine_bias_y, MLP_HIDDEN_DIM + biaffine_bias_x))
-params["R_word_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
+params["R_bemb_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
 
 
 def linear_interpolation(bias, R, inputs):
@@ -250,7 +266,7 @@ def dep_bunsetsu(bembs):
 
     blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_head, input_size, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
 
-    arc_preds = blin.npvalue().argmax(0)
+    arc_preds_not_argmax = blin.npvalue().argmax(0)
     msk = [1] * slen_x
     # msk[0] = 0
     arc_probs = blin.npvalue()
@@ -262,7 +278,7 @@ def dep_bunsetsu(bembs):
     arc_loss = dy.pick_batch_elems(arc_loss, [i for i in range(1, slen_x)])
 
 
-    return arc_loss, arc_preds
+    return arc_loss, arc_preds, arc_preds_not_argmax
 
 
 def bunsetsu_range(bi_bunsetsu_seq):
@@ -328,11 +344,27 @@ def word_embds(cembs, char_seq, word_ranges):
 
 
 def bunsetsu_embds(wembs, bunsetsu_ranges):
+    ret3 = []
+
+    if bemb_with_lstm:
+        for br in bunsetsu_ranges:
+            tmp = []
+            if br[1] < len(wembs):
+                tmp.extend(inputs2lstmouts(l2rlstm_bemb, r2llstm_bemb, wembs[br[0]: br[1]], pdrop))
+            elif br[0] == len(wembs) - 1:
+                tmp.extend(inputs2lstmouts(l2rlstm_bemb, r2llstm_bemb, [wembs[br[0]]], pdrop))
+            else:
+                tmp.extend(inputs2lstmouts(l2rlstm_bemb, r2llstm_bemb, wembs[br[0]: br[-1]], pdrop))
+            tmp_len = len(tmp)
+            ret3.append(dy.esum(tmp) / tmp_len)
+        return ret3
+
+
     ret = []
     ret2 = []
 
 
-    R_word_biaffine = dy.parameter(params["R_word_biaffine"])
+    R_word_biaffine = dy.parameter(params["R_bemb_biaffine"])
 
     for br in bunsetsu_ranges:
         if br[1] < len(wembs):
@@ -344,17 +376,18 @@ def bunsetsu_embds(wembs, bunsetsu_ranges):
         else:
             ret.append(wembs[-1] - wembs[br[0]])
             welms = wembs[br[0]: br[-1]]
+        if bemb_attention:
+            y = ret[-1]
+            x = dy.concatenate(welms, 1)
+            attention = dy.softmax(dy.transpose(bilinear(x, R_word_biaffine, y, HIDDEN_DIM * 2, len(welms), 1, 1)))
+            bemb = dy.cmult(dy.transpose(attention), dy.dropout(x, pdrop * 2))
+            bemb = dy.sum_dim(bemb, [1])
 
-        y = ret[-1]
-        x = dy.concatenate(welms, 1)
-        attention = dy.softmax(dy.transpose(bilinear(x, R_word_biaffine, y, HIDDEN_DIM * 2, len(welms), 1, 1)))
-        bemb = dy.cmult(dy.transpose(attention), x)
-        bemb = dy.sum_dim(bemb, [1])
-
-        ret2.append(bemb)
-
-    return ret2
-    # return ret
+            ret2.append(bemb)
+    if bemb_attention:
+        return ret2
+    else:
+        return ret
 
 def bilinear(x, W, y, input_size, seq_len_x, seq_len_y, batch_size, num_outputs=1, bias_x=False, bias_y=False):
     # x,y: (input_size x seq_len) x batch_size
@@ -392,6 +425,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
         print("iteration: ", it)
         num_tot_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep = 0
+        num_tot_cor_bunsetsu_dep_not_argmax = 0
 
         for i in (range(len(char_seqs))):
             if i % batch_size == 0:
@@ -427,12 +461,14 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
             bunsetsu_ranges = bunsetsu_range(bi_w_seq)
 
-            bembs = bunsetsu_embds(wembs, bunsetsu_ranges)
 
-            bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
-            arc_loss, arc_preds = dep_bunsetsu(bembs)
+            bembs = bunsetsu_embds(wembs, bunsetsu_ranges)
+            if bemb_lstm:
+                bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
+            arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs)
 
             num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, train_chunk_deps[idx]))
+            num_tot_cor_bunsetsu_dep_not_argmax += np.sum(np.equal(arc_preds_not_argmax[1:], train_chunk_deps[idx]))
 
             num_tot_bunsetsu_dep += len(bembs) - 1
 
@@ -456,6 +492,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
                 print(train_chunk_deps[idx])
 
                 print("dep accuracy: ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
+                print("dep accuracy not argmax: ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
 
 
 def word_bi(bi_w_seq, bi_b_seq):
@@ -479,6 +516,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
 
     num_tot_bunsetsu_dep = 0
     num_tot_cor_bunsetsu_dep = 0
+    num_tot_cor_bunsetsu_dep_not_argmax = 0
 
     complete_chunking = 0
     failed_chunking = 0
@@ -534,8 +572,8 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         pred_bunsetsu_ranges = bunsetsu_range(preds_bi_b)
 
         bembs = bunsetsu_embds(wembs, gold_bunsetsu_ranges)
-
-        bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
+        if bemb_lstm:
+            bembs = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
 
         if i % show_acc_every == 0 and i != 0:
             loss_bi_b_value = loss_bi_b.value()
@@ -545,6 +583,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
                 print(i, " accuracy chunking ", num_tot_cor_bi_b / num_tot_bi_b)
             if num_tot_bunsetsu_dep > 0:
                 print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
+                print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
 
         if len(wembs) == num_cor_bi_b:
             complete_chunking += 1
@@ -552,14 +591,17 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         if len(dev_chunk_deps[i]) != len(bembs) - 1:
             failed_chunking += 1
             # continue
-        arc_loss, arc_preds = dep_bunsetsu(bembs)
+        arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs)
 
         num_tot_bunsetsu_dep += len(bembs) - 1
 
         # num_tot_cor_bunsetsu_dep += np.sum(np.equal(np.equal(arc_preds, dev_chunk_deps[i]), remains))
         num_tot_cor_bunsetsu_dep += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds, dev_chunk_deps[i]))])
+        num_tot_cor_bunsetsu_dep_not_argmax += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds_not_argmax[1:], dev_chunk_deps[i]))])
+
         global best_acc
         global update
+        global early_stop_count
         if best_acc + 0.001 < num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep:
             best_acc = num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep
             update = True
@@ -611,6 +653,7 @@ for e in range(epoc):
 
     dev(dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs)
 
+    global early_stop_count
     if not update:
         early_stop_count += 1
 
