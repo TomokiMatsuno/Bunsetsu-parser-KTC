@@ -11,7 +11,10 @@ from file_reader import DataFrameKtc
 
 train_dev_boundary = -1
 files = glob.glob(path2KTC + 'syn/*.*')
-files = glob.glob(path2KTC + 'syn/95010[1-9].*')
+
+if CABOCHA_SPLIT:
+    files = glob.glob(path2KTC + 'syn/95010[1-9].*')
+    train_dev_boundary = -1
 best_acc = 0.0
 update = False
 early_stop_count = 0
