@@ -115,8 +115,11 @@ pc = dy.ParameterCollection()
 l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
 r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
 
-l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
-r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+# l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+# r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+
+l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 
 l2rlstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 r2llstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
@@ -315,26 +318,32 @@ def word_range(bipos_seq):
 
 
 # def word_embds(lstmout, char_seq, bipos_seq, word_ranges):
-def word_embds(cembs, char_seq, word_ranges):
+def word_embds(cembs, char_seq, pos_seq, word_ranges):
     ret = []
 
     lp_c = params["lp_c"]
     lp_w = params["lp_w"]
+    lp_p = params["lp_p"]
 
     for wr in word_ranges:
         str = ""
         tmp_char = []
+        tmp_pos = []
 
         for c in char_seq[wr[0]: wr[1]]:
             str += cd.i2x[c]
             tmp_char.append(lp_c[c])
 
+        for p in pos_seq[wr[0]: wr[1]]:
+            tmp_pos.append(lp_p[p])
+
         tmp_char = dy.esum(tmp_char)
+        tmp_pos = dy.esum(tmp_pos)
 
         if str in wd.x2i:
-            tmp_word = lp_w[wd.x2i[str]]
+            tmp_word = dy.concatenate([lp_w[wd.x2i[str]], tmp_pos])
         else:
-            tmp_word = tmp_char
+            tmp_word = dy.concatenate([tmp_char, tmp_pos])
 
         if wr[1] < len(cembs):
             ret.append((dy.concatenate([cembs[wr[1]] - cembs[wr[0]], tmp_word])))
@@ -449,7 +458,8 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             bi_w_seq = word_bi(bi_w_seq, bi_b_seqs[idx])
 
             word_ranges = word_range(bipos_seqs[idx])
-            wembs = word_embds(cembs, char_seqs[idx], word_ranges)
+            # wembs = word_embds(cembs, char_seqs[idx], word_ranges)
+            wembs = word_embds(cembs, char_seqs[idx], train_pos_seqs[idx], word_ranges)
             wembs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
             loss_bi_bunsetsu, _, _ = bi_bunsetsu_wembs(wembs, bi_w_seq)
@@ -541,7 +551,8 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         num_tot += len(char_seqs[i])
 
         word_ranges = word_range(bipos_seqs[i])
-        wembs = word_embds(cembs, char_seqs[i], word_ranges)
+        # wembs = word_embds(cembs, char_seqs[i], word_ranges)
+        wembs = word_embds(cembs, char_seqs[i], dev_pos_seqs[i], word_ranges)
 
         wembs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
