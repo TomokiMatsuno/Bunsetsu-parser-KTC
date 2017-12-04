@@ -1,13 +1,22 @@
+from collections import defaultdict
+
 import numpy as np
 import dynet as dy
+
+from config import *
 from utils import *
+
 from tarjan import *
 import glob
 import time
 
-from config import *
 from paths import *
 from file_reader import DataFrameKtc
+global circle_count, root_0, root_more_than_1
+circle_count = 0
+root_0 = 0
+root_more_than_1 = 0
+
 
 train_dev_boundary = -1
 files = glob.glob(path2KTC + 'syn/*.*')
@@ -104,6 +113,21 @@ for dcd in dev_chunk_deps:
 
 print(total_chunks)
 
+trigram2count = defaultdict(int)
+ngram = 3
+min_occurrence = 50
+
+for tws in train_word_seqs:
+    for i in range(1, len(tws) - ngram):
+        tmp_str = ""
+        for w in tws[i: i + ngram]:
+            tmp_str = tmp_str + wd.i2x[w]
+        trigram2count[tmp_str] += 1
+
+for k, v in trigram2count.items():
+    if v > min_occurrence:
+        print(v, k)
+
 ###Neural Network
 WORDS_SIZE = len(wd.i2x) + 1
 CHARS_SIZE = len(cd.i2x) + 1
@@ -112,23 +136,42 @@ POS_SIZE = len(td.i2x) + 1
 
 pc = dy.ParameterCollection()
 
-l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
-r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
+if orthonormal:
+    l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
+    r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
 
-# l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
-# r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    # l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    # r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 
-l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
-r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 
-l2rlstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
-r2llstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    l2rlstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    r2llstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
 
-if bemb_lstm:
-    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-# l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-# r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    if bemb_lstm:
+        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    # l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    # r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+else:
+    l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
+    r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
+
+    # l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    # r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+
+    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+
+    l2rlstm_bemb = dy.VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    r2llstm_bemb = dy.VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+
+    if bemb_lstm:
+        l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 
 
 params = {}
@@ -657,9 +700,16 @@ for e in range(epoc):
     pdrop_bunsetsu = pdrop_bunsetsu_stash
 
     train(train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs)
-    if SAVE:
-        pc.save(save_file)
-        print("saved into: ", save_file)
+
+    global root_0, root_more_than_1, cycle_count
+    print("root_0: ", root_0)
+    print("root_more_than_1: ", root_more_than_1)
+    # print("cycle_count: ", cycle_count)
+
+    root_0 = 0
+    root_more_than_1 = 0
+    cycle_count = 0
+
     pdrop = 0.0
     pdrop_bunsetsu = 0.0
     TRAIN = False
@@ -667,9 +717,22 @@ for e in range(epoc):
 
     dev(dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs)
 
+    print("root_0: ", root_0)
+    print("root_more_than_1: ", root_more_than_1)
+    # print("cycle_count: ", cycle_count)
+
+    root_0 = 0
+    root_more_than_1 = 0
+    cycle_count = 0
+
     global early_stop_count
     if not update:
         early_stop_count += 1
+
+    if SAVE and update:
+        pc.save(save_file)
+        print("saved into: ", save_file)
+
 
     if early_stop_count > early_stop:
         print("best_acc: ", best_acc)
