@@ -556,6 +556,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
     trainer = dy.AdagradTrainer(pc, learning_rate)
     losses_bunsetsu = []
     losses_arcs = []
+    prev = time.time()
 
     tot_loss_in_iter = 0
 
@@ -631,6 +632,8 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
                 tot_loss_in_iter += sum_losses_arcs_value
 
             if i % show_loss_every == 0 and i != 0:
+                print("time: ", time.time() - prev)
+                prev = time.time()
                 print(i, " arcs loss")
                 print(sum_losses_arcs_value)
                 print(train_sents[idx].word_forms)
@@ -795,14 +798,6 @@ for e in range(epoc):
 
     train(train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs)
 
-    global root_0, root_more_than_1, cycle_count
-    print("root_0: ", root_0)
-    print("root_more_than_1: ", root_more_than_1)
-    # print("cycle_count: ", cycle_count)
-
-    root_0 = 0
-    root_more_than_1 = 0
-    cycle_count = 0
 
     pdrop = 0.0
     pdrop_bunsetsu = 0.0
@@ -811,13 +806,6 @@ for e in range(epoc):
 
     dev(dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs)
 
-    print("root_0: ", root_0)
-    print("root_more_than_1: ", root_more_than_1)
-    # print("cycle_count: ", cycle_count)
-
-    root_0 = 0
-    root_more_than_1 = 0
-    cycle_count = 0
 
     global early_stop_count
     if not update:
