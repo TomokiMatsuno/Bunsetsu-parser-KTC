@@ -1,5 +1,6 @@
 import codecs
 import re
+from config import use_wif_wit
 
 def make_line_chunks(lines, trigger, end_marker=None):
     lines_idx = 0
@@ -76,7 +77,10 @@ class Word:
                 bi = 'B'
             else:
                 bi = 'I'
-            bipos = bi + '_' + line[3]
+            if use_wif_wit:
+                bipos = bi + '_' + line[3]
+            else:
+                bipos = bi + '_' + line[3] + '_' + line[4]
             if i == 0:
                 self.chars.append(Char(line[0][i], bipos, chunk_bi))
             else:

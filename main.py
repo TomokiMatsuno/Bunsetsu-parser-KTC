@@ -147,12 +147,12 @@ if orthonormal:
     # r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
     l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
     r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
-
-    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-
-    # l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
-    # r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
+    if use_wif_wit:
+        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+    else:
+        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
 
     l2rlstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
     r2llstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
@@ -168,11 +168,12 @@ else:
     l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
     r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 
-    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-
-    # l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
-    # r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
+    if use_wif_wit:
+        l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+        r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+    else:
+        l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+        r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
 
     l2rlstm_bemb = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
     r2llstm_bemb = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
@@ -188,9 +189,11 @@ params = {}
 params["lp_w"] = pc.add_lookup_parameters((WORDS_SIZE + 1, INPUT_DIM))
 params["lp_c"] = pc.add_lookup_parameters((CHARS_SIZE + 1, INPUT_DIM))
 params["lp_p"] = pc.add_lookup_parameters((POS_SIZE + 1, INPUT_DIM))
-params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, INPUT_DIM))
-params["lp_wif"] = pc.add_lookup_parameters((WIF_SIZE + 1, INPUT_DIM))
-params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, INPUT_DIM))
+
+if use_wif_wit:
+    params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, INPUT_DIM))
+    params["lp_wif"] = pc.add_lookup_parameters((WIF_SIZE + 1, INPUT_DIM))
+    params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, INPUT_DIM))
 
 
 
@@ -435,9 +438,10 @@ def word_embds(cembs, char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ran
     lp_c = params["lp_c"]
     lp_w = params["lp_w"]
     lp_p = params["lp_p"]
-    lp_ps = params["lp_ps"]
-    lp_wif = params["lp_wif"]
-    lp_wit = params["lp_wit"]
+    if use_wif_wit:
+        lp_ps = params["lp_ps"]
+        lp_wif = params["lp_wif"]
+        lp_wit = params["lp_wit"]
 
     for idx, wr in enumerate(word_ranges):
         str = ""
@@ -455,8 +459,10 @@ def word_embds(cembs, char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ran
 
         tmp_char = dy.esum(tmp_char) / tmp_char_len
         tmp_pos = tmp_pos[0]
-        tmp_word = dy.concatenate([tmp_pos, lp_ps[pos_sub_seq[idx]], lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
-
+        if use_wif_wit:
+            tmp_word = dy.concatenate([tmp_pos, lp_ps[pos_sub_seq[idx]], lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
+        else:
+            tmp_word = tmp_pos
         if TRAIN:
             rnd_int = np.random.randint(0, 2)
             # rnd_pos = np.random.randint(0, 6)
