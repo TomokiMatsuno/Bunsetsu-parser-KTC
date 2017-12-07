@@ -103,6 +103,10 @@ class Sent:
         self.id = lines[0][1]
         self.chunks = []
         self.word_forms = []
+        self.word_inflection_types = []
+        self.word_inflection_forms = []
+        self.pos = []
+        self.pos_sub = []
         self.char_forms = []
         self.word_biposes = []
         self.chunk_bis = []
@@ -111,6 +115,10 @@ class Sent:
         for ch in self.chunks:
             for word in ch.words:
                 self.word_forms.append(word.feats[0])
+                self.pos.append(word.feats[3])
+                self.pos_sub.append(word.feats[4])
+                self.word_inflection_forms.append(word.feats[5])
+                self.word_inflection_types.append(word.feats[6])
                 for char in word.chars:
                     self.char_forms.append(char.form)
                     self.word_biposes.append(char.word_bipos)
@@ -216,12 +224,18 @@ class DataFrameKtc(DataFrame):
         doc_word_biposes = []
         doc_chunk_bis = []
         doc_pos = []
+        doc_pos_sub = []
+        doc_word_inflection_forms = []
+        doc_word_inflection_types = []
 
         for sent in sents:
             doc_word_forms.append(sent.word_forms)
             doc_char_forms.append(sent.char_forms)
             doc_word_biposes.append(sent.word_biposes)
             doc_chunk_bis.append(sent.chunk_bis)
+            doc_pos_sub.append(sent.pos_sub)
+            doc_word_inflection_forms.append(sent.word_inflection_forms)
+            doc_word_inflection_types.append(sent.word_inflection_types)
 
             poss = []
             for bp in sent.word_biposes:
@@ -234,8 +248,11 @@ class DataFrameKtc(DataFrame):
         cd = Dict(doc_char_forms, initial_entries)
         bpd = Dict(doc_word_biposes, ["NULL", "B_ROOT"])
         td = Dict(doc_pos, initial_entries)
+        tsd = Dict(doc_pos_sub, initial_entries)
+        wif = Dict(doc_word_inflection_forms, initial_entries)
+        wit = Dict(doc_word_inflection_types, initial_entries)
 
-        return wd, cd, bpd, td
+        return wd, cd, bpd, td, tsd, wif, wit
 
 
     def sents2ids(dicts, sents):
@@ -243,6 +260,10 @@ class DataFrameKtc(DataFrame):
         cd = dicts[1]
         bpd = dicts[2]
         td = dicts[3]
+        tsd = dicts[4]
+        wifd = dicts[5]
+        witd = dicts[6]
+
         word_seqs = []
         char_seqs = []
         word_bipos_seqs = []
@@ -250,6 +271,10 @@ class DataFrameKtc(DataFrame):
         chunk_deps = []
         pos_seqs = []
         bi_seqs = []
+
+        pos_sub_seqs = []
+        word_inflection_form_seqs = []
+        word_inflection_types_seqs = []
 
 
         for sent in sents:
@@ -260,6 +285,9 @@ class DataFrameKtc(DataFrame):
             tmp_chunk_dep = []
             tmp_pos = []
             tmp_bi = []
+            tmp_pos_sub = []
+            tmp_wif = []
+            tmp_wit = []
 
             tmp_word.append(wd.x2i["ROOT"])
             tmp_char.append(cd.x2i["ROOT"])
@@ -267,6 +295,9 @@ class DataFrameKtc(DataFrame):
             tmp_chunk_bi.append(0)
             tmp_pos.append(td.x2i["ROOT"])
             tmp_bi.append(0)
+            tmp_pos_sub.append(tsd.x2i["ROOT"])
+            tmp_wif.append(wifd.x2i["ROOT"])
+            tmp_wit.append(witd.x2i["ROOT"])
             # tmp_chunk_dep.append(0)
 
             for wf in sent.word_forms:
@@ -281,6 +312,12 @@ class DataFrameKtc(DataFrame):
                 tmp_chunk_bi.append(0 if cbi == 'B' else 1)
             for ch in sent.chunks:
                 tmp_chunk_dep.append(ch.head)
+            for ps in sent.pos_sub:
+                tmp_pos_sub.append(tsd.x2i[ps])
+            for wif in sent.word_inflection_forms:
+                tmp_wif.append(wifd.x2i[wif])
+            for wit in sent.word_inflection_types:
+                tmp_wit.append(witd.x2i[wit])
 
             word_seqs.append(tmp_word)
             char_seqs.append(tmp_char)
@@ -289,6 +326,11 @@ class DataFrameKtc(DataFrame):
             chunk_deps.append(tmp_chunk_dep)
             pos_seqs.append(tmp_pos)
             bi_seqs.append(tmp_bi)
+            pos_sub_seqs.append(tmp_pos_sub)
+            word_inflection_form_seqs.append(tmp_wif)
+            word_inflection_types_seqs.append(tmp_wit)
 
-        return word_seqs, char_seqs, word_bipos_seqs, chunk_bi_seqs, chunk_deps, pos_seqs, bi_seqs
+        return word_seqs, char_seqs, word_bipos_seqs, \
+               chunk_bi_seqs, chunk_deps, pos_seqs, bi_seqs, \
+               pos_sub_seqs, word_inflection_form_seqs, word_inflection_types_seqs
 
