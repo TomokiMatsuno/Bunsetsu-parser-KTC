@@ -140,7 +140,18 @@ WIF_SIZE = len(wifd.i2x) + 1
 WIT_SIZE = len(witd.i2x) + 1
 
 pc = dy.ParameterCollection()
-trainer = dy.AdagradTrainer(pc, learning_rate)
+
+trainer = dy.AdamTrainer(pc, learning_rate, beta_1, beta_2, epsilon)
+
+global_step = 0
+
+
+def update_parameters():
+    trainer.learning_rate = learning_rate * decay ** (global_step / decay_steps)
+    trainer.update()
+
+
+# trainer = dy.AdagradTrainer(pc, learning_rate)
 
 if orthonormal:
     # l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
@@ -806,6 +817,8 @@ for e in range(epoc):
 
     train(train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs)
 
+    update_parameters()
+    global_step += 1
 
     pdrop = 0.0
     pdrop_bunsetsu = 0.0
