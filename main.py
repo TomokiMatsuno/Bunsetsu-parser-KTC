@@ -139,8 +139,8 @@ POSSUB_SIZE = len(tsd.i2x) + 1
 WIF_SIZE = len(wifd.i2x) + 1
 WIT_SIZE = len(witd.i2x) + 1
 
-
 pc = dy.ParameterCollection()
+trainer = dy.AdagradTrainer(pc, learning_rate)
 
 if orthonormal:
     # l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
@@ -553,7 +553,6 @@ def bilinear(x, W, y, input_size, seq_len_x, seq_len_y, batch_size, num_outputs=
 
 
 def train(char_seqs, bipos_seqs, bi_b_seqs):
-    trainer = dy.AdagradTrainer(pc, learning_rate)
     losses_bunsetsu = []
     losses_arcs = []
     prev = time.time()
@@ -672,6 +671,8 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
     failed_chunking = 0
     chunks_excluded = 0
 
+    prev = time.time()
+
     print(pdrop)
     print(pdrop_bunsetsu)
 
@@ -738,7 +739,8 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
             if num_tot_bunsetsu_dep > 0:
                 print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
                 print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
-
+            print("time: ", time.time() - prev)
+            prev = time.time()
         if len(wembs) == num_cor_bi_b:
             complete_chunking += 1
 
@@ -783,8 +785,8 @@ if LOAD:
     print("loaded from: ", load_file)
 
 for e in range(epoc):
-    prev = time.time() - prev
-    print("time: ", prev)
+    print("time: ", time.time() - prev)
+    prev = time.time()
     print("epoc: ", e)
     with open(result_file, mode='a', encoding='utf-8') as f:
         f.write("time: " + str(prev) + '\n')
