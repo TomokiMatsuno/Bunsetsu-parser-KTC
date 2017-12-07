@@ -148,18 +148,18 @@ if orthonormal:
     l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
     r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 
-    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
-    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
 
     # l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
     # r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
 
-    l2rlstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
-    r2llstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    l2rlstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    r2llstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 
     if bemb_lstm:
-        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
     # l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
     # r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 else:
@@ -168,18 +168,18 @@ else:
     l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
     r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 
-    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
-    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
 
     # l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
     # r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2, HIDDEN_DIM, pc)
 
-    l2rlstm_bemb = dy.VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
-    r2llstm_bemb = dy.VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM * 2, HIDDEN_DIM, pc)
+    l2rlstm_bemb = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    r2llstm_bemb = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 
     if bemb_lstm:
-        l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+        l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
     # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
     # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 
@@ -196,7 +196,7 @@ params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, INPUT_DIM))
 
 # params["lp_bp"] = pc.add_lookup_parameters((BIPOS_SIZE + 1, INPUT_DIM))
 
-params["R_bi_b"] = pc.add_parameters((2, HIDDEN_DIM * 2))
+params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
 
 # params["head_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
@@ -217,7 +217,7 @@ params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
 params["R_bunsetsu_biaffine"] = pc.add_parameters((MLP_HIDDEN_DIM + biaffine_bias_y, MLP_HIDDEN_DIM + biaffine_bias_x))
 
 if bemb_attention:
-    params["R_bemb_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
+    params["R_bemb_biaffine"] = pc.add_parameters((word_HIDDEN_DIM * 2, word_HIDDEN_DIM * 2))
 
 
 def linear_interpolation(bias, R, inputs):
@@ -506,8 +506,8 @@ def bunsetsu_embds(wembs, bunsetsu_ranges):
     ret = []
     ret2 = []
 
-
-    R_word_biaffine = dy.parameter(params["R_bemb_biaffine"])
+    if bemb_attention:
+        R_word_biaffine = dy.parameter(params["R_bemb_biaffine"])
 
     for br in bunsetsu_ranges:
         if br[1] < len(wembs):
@@ -522,7 +522,7 @@ def bunsetsu_embds(wembs, bunsetsu_ranges):
         if bemb_attention:
             y = ret[-1]
             x = dy.concatenate(welms, 1)
-            attention = dy.softsign(dy.transpose(bilinear(x, R_word_biaffine, y, HIDDEN_DIM * 2, len(welms), 1, 1)))
+            attention = dy.softsign(dy.transpose(bilinear(x, R_word_biaffine, y, bunsetsu_HIDDEN_DIM * 2, len(welms), 1, 1)))
             bemb = dy.cmult(dy.transpose(attention), dy.dropout(x, pdrop))
             bemb = dy.sum_dim(bemb, [1])
 
