@@ -141,13 +141,13 @@ WIT_SIZE = len(witd.i2x) + 1
 
 pc = dy.ParameterCollection()
 
-trainer = dy.AdamTrainer(pc, learning_rate, beta_1, beta_2, epsilon)
+trainer = dy.AdadeltaTrainer(pc)
 
 global_step = 0
 
-
 def update_parameters():
-    trainer.learning_rate = learning_rate * decay ** (global_step / decay_steps)
+    if use_annealing:
+        trainer.learning_rate = learning_rate * decay ** (global_step / decay_steps)
     trainer.update()
 
 
@@ -159,8 +159,8 @@ if orthonormal:
     l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
     r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
     if use_wif_wit:
-        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 3 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 3 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
     else:
         l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
         r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
@@ -180,8 +180,8 @@ else:
     r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 
     if use_wif_wit:
-        l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-        r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+        l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 3 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+        r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 3 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
     else:
         l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
         r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
@@ -212,6 +212,9 @@ if use_wif_wit:
 
 params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
+
+params["R_LI_INPUT"] = pc.add_parameters((INPUT_DIM, INPUT_DIM))
+params["bias_LI_INPUT"] = pc.add_parameters((INPUT_DIM))
 
 # params["head_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
 # params["head_MLP_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
@@ -454,6 +457,9 @@ def word_embds(cembs, char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ran
         lp_wif = params["lp_wif"]
         lp_wit = params["lp_wit"]
 
+        R = dy.parameter(params["R_LI_INPUT"])
+        bias = dy.parameter(params["bias_LI_INPUT"])
+
     for idx, wr in enumerate(word_ranges):
         str = ""
         tmp_char = []
@@ -461,7 +467,7 @@ def word_embds(cembs, char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ran
 
         for c in char_seq[wr[0]: wr[1]]:
             str += cd.i2x[c]
-            tmp_char.append(lp_c[c])
+            tmp_char.append(dy.dropout(lp_c[c], pdrop))
 
         for p in pos_seq[wr[0]: wr[1]]:
             tmp_pos.append(lp_p[p])
@@ -469,9 +475,10 @@ def word_embds(cembs, char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ran
         tmp_char_len = len(tmp_char)
 
         tmp_char = dy.esum(tmp_char) / tmp_char_len
-        tmp_pos = tmp_pos[0]
+        tmp_pos = dy.dropout(tmp_pos[0], pdrop)
         if use_wif_wit:
-            tmp_word = dy.concatenate([tmp_pos, lp_ps[pos_sub_seq[idx]], lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
+            #tmp_word = dy.concatenate([tmp_pos, lp_ps[pos_sub_seq[idx]], lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
+            tmp_word = dy.concatenate([tmp_pos, linear_interpolation(bias, R, [dy.dropout(lp_ps[pos_sub_seq[idx]], pdrop), dy.dropout(lp_wif[wif_seq[idx]], pdrop), dy.dropout(lp_wit[wit_seq[idx]], pdrop)])])
         else:
             tmp_word = tmp_pos
         if TRAIN:
@@ -484,7 +491,7 @@ def word_embds(cembs, char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ran
             #     tmp_pos = dy.zeros((INPUT_DIM))
 
             if str in wd.x2i and rnd_int == 0:
-                tmp_word = dy.concatenate([lp_w[wd.x2i[str]], tmp_word])
+                tmp_word = dy.concatenate([dy.dropout(lp_w[wd.x2i[str]], pdrop), tmp_word])
             else:
                 tmp_word = dy.concatenate([tmp_char, tmp_word])
         else:
@@ -575,6 +582,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
     prev = time.time()
 
     tot_loss_in_iter = 0
+    #trainer = dy.AdagradTrainer(pc, learning_rate)
 
     print(pdrop)
     print(pdrop_bunsetsu)
@@ -637,14 +645,16 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             num_tot_bunsetsu_dep += len(bembs) - 1
 
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
-
+            global global_step
             if i % batch_size == 0 and i != 0:
                 losses_arcs.extend(losses_bunsetsu)
 
                 sum_losses_arcs = dy.esum(losses_arcs)
                 sum_losses_arcs_value = sum_losses_arcs.value()
                 sum_losses_arcs.backward()
-                trainer.update()
+                update_parameters()
+                global_step += 1
+                #trainer.update()
                 tot_loss_in_iter += sum_losses_arcs_value
 
             if i % show_loss_every == 0 and i != 0:
@@ -659,6 +669,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
                 print("dep accuracy: ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
                 print("dep accuracy not argmax: ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
+    print("total loss in this epoch: ", tot_loss_in_iter)
 
 
 def word_bi(bi_w_seq, bi_b_seq):
@@ -692,6 +703,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
 
     print(pdrop)
     print(pdrop_bunsetsu)
+    total_loss = 0
 
     for i in range(len(char_seqs)):
         dy.renew_cg()
@@ -772,13 +784,13 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         num_tot_cor_bunsetsu_dep += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds, dev_chunk_deps[i]))])
         num_tot_cor_bunsetsu_dep_not_argmax += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds_not_argmax[1:], dev_chunk_deps[i]))])
 
-        global best_acc
-        global update
-        global early_stop_count
-        if best_acc + 0.001 < num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep:
-            best_acc = num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep
-            update = True
-            early_stop_count = 0
+    global best_acc
+    global update
+    global early_stop_count
+    if best_acc + 0.001 < num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep:
+        best_acc = num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep
+        update = True
+        early_stop_count = 0
 
     with open(result_file, mode='a', encoding='utf-8') as f:
         f.write(str(i) + " accuracy chunking " + str(num_tot_cor_bi_b / num_tot_bi_b) + '\n')
@@ -787,11 +799,13 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         f.write("failed_chunking rate: " + str(failed_chunking / len(char_seqs))+ '\n')
         f.write("complete chunking: " + str(complete_chunking)+ '\n')
         f.write("failed_chunking: " + str(failed_chunking)+ '\n')
+        #f.write("total arc loss: " + str(total_loss) + '\n')
     print("complete_chunking rate: " + str(complete_chunking / len(char_seqs)))
     print("failed_chunking rate: " + str(failed_chunking / len(char_seqs)))
     print("complete chunking: " + str(complete_chunking))
     print("failed_chunking: " + str(failed_chunking))
     print("chunks_excluded: ", chunks_excluded)
+    #print("total arc loss: " + str(total_loss))
     return
 
 
@@ -816,9 +830,6 @@ for e in range(epoc):
     pdrop_bunsetsu = pdrop_bunsetsu_stash
 
     train(train_char_seqs, train_word_bipos_seqs, train_chunk_bi_seqs)
-
-    update_parameters()
-    global_step += 1
 
     pdrop = 0.0
     pdrop_bunsetsu = 0.0
