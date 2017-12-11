@@ -749,7 +749,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
             remains[fc]
             dev_chunk_deps[i]
             chunks_excluded += np.sum(np.equal(dev_chunk_deps[i], fc)) + remains[fc]
-            remains = [r * d for r, d in zip(remains, np.equal(dev_chunk_deps[i], fc))]
+            remains = [r * (1 - d) for r, d in zip(remains, np.equal(dev_chunk_deps[i], fc))]
             remains[fc] = False
 
 
@@ -782,7 +782,9 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
 
         # num_tot_cor_bunsetsu_dep += np.sum(np.equal(np.equal(arc_preds, dev_chunk_deps[i]), remains))
         num_tot_cor_bunsetsu_dep += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds, dev_chunk_deps[i]))])
-        num_tot_cor_bunsetsu_dep_not_argmax += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds_not_argmax[1:], dev_chunk_deps[i]))])
+        #num_tot_cor_bunsetsu_dep_not_argmax += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds_not_argmax[1:], dev_chunk_deps[i]))])
+        num_tot_cor_bunsetsu_dep_not_argmax += np.sum(
+            np.equal(arc_preds_not_argmax[1:], dev_chunk_deps[i]))
 
     global best_acc
     global update
