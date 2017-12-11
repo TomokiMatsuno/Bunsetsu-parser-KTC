@@ -247,7 +247,7 @@ class DataFrameKtc(DataFrame):
             doc_pos.append(poss)
 
         if initial_entries is None:
-            initial_entries = ["NULL", "UNK", "ROOT"]
+            initial_entries = ["NULL", "UNK", "ROOT", "SOS", "EOS"]
         wd = Dict(doc_word_forms, initial_entries)
         cd = Dict(doc_char_forms, initial_entries)
         bpd = Dict(doc_word_biposes, ["NULL", "B_ROOT"])
