@@ -179,12 +179,12 @@ else:
     l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
     r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
 
-    if use_wif_wit:
-        l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 3 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-        r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 3 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-    else:
-        l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-        r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+    # if use_wif_wit:
+    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+    # else:
+    #     l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+    #     r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
 
     l2rlstm_bemb = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
     r2llstm_bemb = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
@@ -200,6 +200,7 @@ params = {}
 params["lp_w"] = pc.add_lookup_parameters((WORDS_SIZE + 1, INPUT_DIM))
 params["lp_c"] = pc.add_lookup_parameters((CHARS_SIZE + 1, INPUT_DIM))
 params["lp_p"] = pc.add_lookup_parameters((POS_SIZE + 1, INPUT_DIM))
+params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, INPUT_DIM))
 
 if use_wif_wit:
     params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, INPUT_DIM))
@@ -213,8 +214,15 @@ if use_wif_wit:
 params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
 
-params["R_LI_INPUT"] = pc.add_parameters((INPUT_DIM, INPUT_DIM))
-params["bias_LI_INPUT"] = pc.add_parameters((INPUT_DIM))
+params["R_w"] = pc.add_parameters((HIDDEN_DIM, INPUT_DIM * 2))
+params["bias_w"] = pc.add_parameters((HIDDEN_DIM))
+
+params["R_p"] = pc.add_parameters((HIDDEN_DIM, INPUT_DIM * 2))
+params["bias_p"] = pc.add_parameters((HIDDEN_DIM))
+
+params["R_wi"] = pc.add_parameters((HIDDEN_DIM, INPUT_DIM * 2))
+params["bias_wi"] = pc.add_parameters((HIDDEN_DIM))
+
 
 # params["head_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
 # params["head_MLP_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
@@ -452,13 +460,20 @@ def word_embds(cembs, char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ran
     lp_c = params["lp_c"]
     lp_w = params["lp_w"]
     lp_p = params["lp_p"]
+    lp_ps = params["lp_ps"]
+
+    R_w = dy.parameter(params["R_w"])
+    bias_w = dy.parameter(params["bias_w"])
+
+    R_p = dy.parameter(params["R_p"])
+    bias_p = dy.parameter(params["bias_p"])
+
     if use_wif_wit:
-        lp_ps = params["lp_ps"]
         lp_wif = params["lp_wif"]
         lp_wit = params["lp_wit"]
 
-        R = dy.parameter(params["R_LI_INPUT"])
-        bias = dy.parameter(params["bias_LI_INPUT"])
+        R_wi = dy.parameter(params["R_wi"])
+        bias_wi = dy.parameter(params["bias_wi"])
 
     for idx, wr in enumerate(word_ranges):
         str = ""
@@ -475,12 +490,14 @@ def word_embds(cembs, char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ran
         tmp_char_len = len(tmp_char)
 
         tmp_char = dy.esum(tmp_char) / tmp_char_len
-        tmp_pos = dy.dropout(tmp_pos[0], pdrop)
+
+        pos_sub_pos = bias_p + R_p * dy.concatenate([lp_p[pos_seq[wr[0]]], lp_ps[pos_sub_seq[idx]]])
+
         if use_wif_wit:
-            #tmp_word = dy.concatenate([tmp_pos, lp_ps[pos_sub_seq[idx]], lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
-            tmp_word = dy.concatenate([tmp_pos, linear_interpolation(bias, R, [dy.dropout(lp_ps[pos_sub_seq[idx]], pdrop), dy.dropout(lp_wif[wif_seq[idx]], pdrop), dy.dropout(lp_wit[wit_seq[idx]], pdrop)])])
+            wif_wit = bias_wi + R_wi * dy.concatenate([lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
+            tmp_word = pos_sub_pos + wif_wit
         else:
-            tmp_word = tmp_pos
+            tmp_word = linear_interpolation(bias_p, R_p, dy.concatenate([lp_p[pos_seq[wr[0]]], lp_ps[pos_sub_seq[idx]]]))
         if TRAIN:
             rnd_int = np.random.randint(0, 2)
             # rnd_pos = np.random.randint(0, 6)
@@ -491,14 +508,20 @@ def word_embds(cembs, char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ran
             #     tmp_pos = dy.zeros((INPUT_DIM))
 
             if str in wd.x2i and rnd_int == 0:
-                tmp_word = dy.concatenate([dy.dropout(lp_w[wd.x2i[str]], pdrop), tmp_word])
+                # tmp_word = dy.concatenate([dy.dropout(lp_w[wd.x2i[str]], pdrop), tmp_word])
+                tmp_word = bias_w + R_w * dy.concatenate(
+                    [dy.dropout(lp_w[wd.x2i[str]], pdrop), tmp_char]) + tmp_word
             else:
-                tmp_word = dy.concatenate([tmp_char, tmp_word])
+                tmp_word = bias_w + R_w * dy.concatenate(
+                    [tmp_char, tmp_char]) + tmp_word
         else:
             if str in wd.x2i:
-                tmp_word = dy.concatenate([lp_w[wd.x2i[str]], tmp_word])
+                tmp_word = bias_w + R_w * dy.concatenate(
+                    [lp_w[wd.x2i[str]], tmp_char]) + tmp_word
             else:
-                tmp_word = dy.concatenate([tmp_char, tmp_word])
+                tmp_word = bias_w + R_w * dy.concatenate(
+                    [tmp_char, tmp_char]) + tmp_word
+        tmp_word = dy.cube(tmp_word)
 
         if wr[1] < len(cembs):
             ret.append((dy.concatenate([cembs[wr[1]] - cembs[wr[0]], tmp_word])))
@@ -840,7 +863,6 @@ for e in range(epoc):
 
     dev(dev_char_seqs, dev_word_bipos_seqs, dev_chunk_bi_seqs)
 
-
     global early_stop_count
     if not update:
         early_stop_count += 1
@@ -849,7 +871,9 @@ for e in range(epoc):
         pc.save(save_file)
         print("saved into: ", save_file)
 
-
     if early_stop_count > early_stop:
         print("best_acc: ", best_acc)
+        with open(result_file, mode='a', encoding='utf-8') as f:
+            f.write("best_acc: ", best_acc)
+
         break
