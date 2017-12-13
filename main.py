@@ -160,58 +160,14 @@ def update_parameters():
         trainer.learning_rate = learning_rate * decay ** (global_step / decay_steps)
     trainer.update()
 
+l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, INPUT_DIM, pc)
+r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, INPUT_DIM, pc)
 
-# trainer = dy.AdagradTrainer(pc, learning_rate)
+l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
+r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
 
-if orthonormal:
-    # l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
-    # r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
-    l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
-    r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM, HIDDEN_DIM, pc)
-    if use_wif_wit:
-        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 3 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 3 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-    else:
-        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-
-    l2rlstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-
-    if bemb_lstm:
-        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-    # l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-    # r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-else:
-    # l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
-    # r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, HIDDEN_DIM, pc)
-    l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, INPUT_DIM, pc)
-    r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 2, INPUT_DIM, pc)
-
-    # if use_wif_wit:
-    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, HIDDEN_DIM + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-
-    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, word_HIDDEN_DIM, word_HIDDEN_DIM, pc)
-    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, word_HIDDEN_DIM, word_HIDDEN_DIM, pc)
-    # else:
-    #     l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-    #     r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 2 + HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
-
-    l2rlstm_bemb = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_bemb = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc)
-
-    if bemb_lstm:
-        if use_wembs or next_bemb:
-            l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-            r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-        else:
-            l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-            r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-
-    # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-    # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 
 
 params = {}
@@ -221,57 +177,9 @@ params["lp_bp"] = pc.add_lookup_parameters((BIPOS_SIZE + 1, INPUT_DIM))
 params["lp_p"] = pc.add_lookup_parameters((POS_SIZE + 1, INPUT_DIM))
 params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, INPUT_DIM))
 
-if use_wif_wit:
-    params["lp_wif"] = pc.add_lookup_parameters((WIF_SIZE + 1, INPUT_DIM))
-    params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, INPUT_DIM))
 
-
-
-# params["lp_bp"] = pc.add_lookup_parameters((BIPOS_SIZE + 1, INPUT_DIM))
-if use_wembs:
-    params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 2))
-else:
-    params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM))
+params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
-
-# params["R_w"] = pc.add_parameters((HIDDEN_DIM, INPUT_DIM * 2))
-# params["bias_w"] = pc.add_parameters((HIDDEN_DIM))
-#
-# params["R_p"] = pc.add_parameters((HIDDEN_DIM, INPUT_DIM * 2))
-# params["bias_p"] = pc.add_parameters((HIDDEN_DIM))
-#
-# params["R_wi"] = pc.add_parameters((HIDDEN_DIM, INPUT_DIM * 2))
-# params["bias_wi"] = pc.add_parameters((HIDDEN_DIM))
-
-# params["R_w"] = pc.add_parameters((word_HIDDEN_DIM, INPUT_DIM * 6))
-# params["bias_w"] = pc.add_parameters((word_HIDDEN_DIM))
-#
-# params["R_p"] = pc.add_parameters((word_HIDDEN_DIM, INPUT_DIM * 6))
-#
-# params["R_wi"] = pc.add_parameters((word_HIDDEN_DIM, INPUT_DIM * 6))
-
-params["R_w"] = pc.add_parameters((word_HIDDEN_DIM , INPUT_DIM * 3))
-params["bias_w"] = pc.add_parameters((word_HIDDEN_DIM))
-
-params["R_p"] = pc.add_parameters((word_HIDDEN_DIM, INPUT_DIM * 2))
-params["bias_p"] = pc.add_parameters((word_HIDDEN_DIM))
-params["R_wi"] = pc.add_parameters((word_HIDDEN_DIM, INPUT_DIM * 2))
-params["bias_wi"] = pc.add_parameters((word_HIDDEN_DIM))
-
-params["R_b1"] = pc.add_parameters((bunsetsu_HIDDEN_DIM, word_HIDDEN_DIM))
-params["R_b2"] = pc.add_parameters((bunsetsu_HIDDEN_DIM, word_HIDDEN_DIM * 2))
-params["R_b3"] = pc.add_parameters((bunsetsu_HIDDEN_DIM, word_HIDDEN_DIM * 3))
-params["b1_bias"] = pc.add_parameters((bunsetsu_HIDDEN_DIM))
-params["b2_bias"] = pc.add_parameters((bunsetsu_HIDDEN_DIM))
-params["b3_bias"] = pc.add_parameters((bunsetsu_HIDDEN_DIM))
-
-params["filter_2d"] = pc.add_parameters((2, 2, 1, 2))
-
-# params["head_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
-# params["head_MLP_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
-#
-# params["dep_MLP"] = pc.add_parameters((HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
-# params["dep_MLP_bias"] = pc.add_parameters((HIDDEN_DIM * 2))
 
 params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * 2))
 params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
@@ -279,38 +187,7 @@ params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
 params["dep_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * 2))
 params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
 
-# params["R_bunsetsu_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2 + biaffine_bias_y, HIDDEN_DIM * 2 + biaffine_bias_x))
-# params["R_word_biaffine"] = pc.add_parameters((HIDDEN_DIM * 2, HIDDEN_DIM * 2))
-
 params["R_bunsetsu_biaffine"] = pc.add_parameters((MLP_HIDDEN_DIM + biaffine_bias_y, MLP_HIDDEN_DIM + biaffine_bias_x))
-
-if bemb_attention:
-    params["R_bemb_biaffine"] = pc.add_parameters((word_HIDDEN_DIM, word_HIDDEN_DIM))
-
-
-def linear_interpolation(bias, R, inputs):
-    ret = bias
-    for i in range(len(inputs)):
-        ret += R * inputs[i]
-    return ret
-
-
-# def inputs2lstmouts(l2rlstm, r2llstm, inputs, pdrop):
-#
-#     s_l2r_0 = l2rlstm.initial_state()
-#     s_r2l_0 = r2llstm.initial_state()
-#
-#     l2rlstm.set_dropouts(pdrop, pdrop)
-#     r2llstm.set_dropouts(pdrop, pdrop)
-#
-#     s_l2r = s_l2r_0
-#     s_r2l = s_r2l_0
-#
-#     l2r_outs = s_l2r.add_inputs(inputs)
-#     r2l_outs = s_r2l.add_inputs(reversed(inputs))
-#     lstm_outs = [dy.concatenate([l2r_outs[i].output(), r2l_outs[i].output()]) for i in range(len(l2r_outs))]
-#
-#     return lstm_outs
 
 def inputs2lstmouts(l2rlstm, r2llstm, inputs, pdrop):
 
@@ -333,60 +210,6 @@ def inputs2lstmouts(l2rlstm, r2llstm, inputs, pdrop):
     return lstm_outs, l2r_outs, r2l_outs
 
 
-
-def char_embds(char_seq):
-
-    lp_c = params["lp_c"]
-
-    cembs = [lp_c[char_seq[i]] for i in range(len(char_seq))]
-
-    return cembs
-
-#
-# def char_embds(l2rlstm, r2llstm, char_seq, bipos_seq):
-#     s_l2r_0 = l2rlstm.initial_state()
-#     s_r2l_0 = r2llstm.initial_state()
-#
-#     lp_c = params["lp_c"]
-#     lp_bp = params["lp_bp"]
-#
-#     l2rlstm.set_dropouts(pdrop, pdrop)
-#     r2llstm.set_dropouts(pdrop, pdrop)
-#
-#     s_l2r = s_l2r_0
-#     s_r2l = s_r2l_0
-#
-#     cembs = [dy.concatenate([lp_c[char_seq[i]], lp_bp[bipos_seq[i]]]) for i in range(len(char_seq))]
-#
-#     l2r_outs = s_l2r.add_inputs(cembs)
-#     r2l_outs = s_r2l.add_inputs(reversed(cembs))
-#     lstm_outs = [dy.concatenate([l2r_outs[i].output(), r2l_outs[i].output()]) for i in range(len(l2r_outs))]
-#
-#     return lstm_outs
-
-
-def bi_bunsetsu(lstmout, bi_b_seq):
-    num_cor = 0
-
-    R_bi_b = dy.parameter(params["R_bi_b"])
-    bias_bi_b = dy.parameter(params["bias_bi_b"])
-    loss = []
-    preds = []
-
-    for i in range(len(bi_b_seq)):
-        probs = dy.softmax(R_bi_b * lstmout[i] + bias_bi_b)
-        loss.append(-dy.log(dy.pick(probs, bi_b_seq[i])))
-
-        if not TRAIN:
-            chosen = np.asscalar(np.argmax(probs.npvalue()))
-            preds.append(chosen)
-            if(chosen == bi_b_seq[i]):
-                # print(chosen, " ", bi_b_seq[w_1st_chars[i]])
-                num_cor += 1
-    loss = dy.esum(loss)
-    return loss, preds, num_cor
-
-
 def bi_bunsetsu_wembs(wembs, bi_w_seq):
     num_cor = 0
 
@@ -394,8 +217,6 @@ def bi_bunsetsu_wembs(wembs, bi_w_seq):
     bias_bi_b = dy.parameter(params["bias_bi_b"])
     loss = []
     preds = []
-    wembs = wembs[1: -1]
-
 
     for i in range(len(bi_w_seq)):
         probs = dy.softmax(R_bi_b * wembs[i] + bias_bi_b)
@@ -478,164 +299,14 @@ def word_range(bipos_seq):
     return ret
 
 
-# def word_embds(char_seq, pos_seq, word_ranges):
-#     ret = []
-#
-#     lp_c = params["lp_c"]
-#     lp_w = params["lp_w"]
-#     lp_p = params["lp_p"]
-#
-#     for wr in word_ranges:
-#         str = ""
-#         tmp_char = []
-#         tmp_pos = []
-#
-#         for c in char_seq[wr[0]: wr[1]]:
-#             str += cd.i2x[c]
-#             tmp_char.append(lp_c[c])
-#
-#         for p in pos_seq[wr[0]: wr[1]]:
-#             tmp_pos.append(lp_p[p])
-#
-#         tmp_char_len = len(tmp_char)
-#         tmp_char = dy.esum(tmp_char) / tmp_char_len
-#         # tmp_pos = dy.esum(tmp_pos)
-#         tmp_pos = tmp_pos[0]
-#
-#         rnd_int = np.random.randint(0, 2)
-#
-#         if TRAIN:
-#             if rnd_int == 0 and str in wd.x2i:
-#                 tmp_word = dy.concatenate([lp_w[wd.x2i[str]], tmp_pos])
-#             else:
-#                 tmp_word = dy.concatenate([tmp_char, tmp_pos])
-#         else:
-#             if str in wd.x2i:
-#                 tmp_word = dy.concatenate([lp_w[wd.x2i[str]], tmp_pos])
-#             else:
-#                 tmp_word = dy.concatenate([tmp_char, tmp_pos])
-#
-#         ret.append(tmp_word)
-#
-#     return ret
-
-
-# def word_embds(cembs, char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ranges):
-#     ret = []
-#
-#     lp_c = params["lp_c"]
-#     lp_w = params["lp_w"]
-#     lp_p = params["lp_p"]
-#     lp_ps = params["lp_ps"]
-#
-#     R_w = dy.parameter(params["R_w"])
-#     bias_w = dy.parameter(params["bias_w"])
-#
-#     R_p = dy.parameter(params["R_p"])
-#     bias_p = dy.parameter(params["bias_p"])
-#
-#     if use_wif_wit:
-#         lp_wif = params["lp_wif"]
-#         lp_wit = params["lp_wit"]
-#
-#         R_wi = dy.parameter(params["R_wi"])
-#         bias_wi = dy.parameter(params["bias_wi"])
-#
-#     for idx, wr in enumerate(word_ranges):
-#         str = ""
-#         tmp_char = []
-#         tmp_pos = []
-#
-#         for c in char_seq[wr[0]: wr[1]]:
-#             str += cd.i2x[c]
-#             tmp_char.append(dy.dropout(lp_c[c], pdrop))
-#
-#         for p in pos_seq[wr[0]: wr[1]]:
-#             tmp_pos.append(lp_p[p])
-#
-#         tmp_char_len = len(tmp_char)
-#
-#         tmp_char = dy.esum(tmp_char) / tmp_char_len
-#
-#         # pos_sub_pos = bias_p + R_p * dy.concatenate([lp_p[pos_seq[wr[0]]], lp_ps[pos_sub_seq[idx]]])
-#         pos_sub_pos = dy.concatenate([lp_p[pos_seq[wr[0]]], lp_ps[pos_sub_seq[idx]]])
-#         if use_wif_wit:
-#             wif_wit = bias_wi + R_wi * dy.concatenate([lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
-#             # wif_wit = dy.concatenate([lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
-#             tmp_word = pos_sub_pos + wif_wit
-#             # tmp_word = dy.concatenate([pos_sub_pos, wif_wit])
-#         else:
-#             tmp_word = linear_interpolation(bias_p, R_p, dy.concatenate([lp_p[pos_seq[wr[0]]], lp_ps[pos_sub_seq[idx]]]))
-#             # tmp_word = pos_sub_pos
-#         if TRAIN:
-#             rnd_int = np.random.randint(0, 2)
-#             # rnd_pos = np.random.randint(0, 6)
-#
-#             # if rnd_pos == 0:
-#             #     tmp_pos = tmp_char
-#             # elif rnd_pos == 1:
-#             #     tmp_pos = dy.zeros((INPUT_DIM))
-#
-#             if str in wd.x2i and rnd_int == 0:
-#                 # tmp_word = dy.concatenate([dy.dropout(lp_w[wd.x2i[str]], pdrop), tmp_word])
-#                 tmp_word = bias_w + R_w * dy.concatenate(
-#                     [dy.dropout(lp_w[wd.x2i[str]], pdrop), tmp_char]) + tmp_word
-#             else:
-#                 # tmp_word = dy.concatenate([tmp_char, tmp_word])
-#                 tmp_word = bias_w + R_w * dy.concatenate(
-#                     [tmp_char, tmp_char]) + tmp_word
-#         else:
-#             if str in wd.x2i:
-#                 # tmp_word = dy.concatenate([lp_w[wd.x2i[str]], tmp_word])
-#                 tmp_word = bias_w + R_w * dy.concatenate(
-#                     [lp_w[wd.x2i[str]], tmp_char]) + tmp_word
-#             else:
-#                 # tmp_word = dy.concatenate([tmp_char, tmp_word])
-#                 tmp_word = bias_w + R_w * dy.concatenate(
-#                     [tmp_char, tmp_char]) + tmp_word
-#         tmp_word = dy.cube(tmp_word)
-#
-#         if wr[1] < len(cembs):
-#             ret.append((dy.concatenate([cembs[wr[1]] - cembs[wr[0]], tmp_word])))
-#         elif wr[0] == len(cembs) - 1:
-#             ret.append((dy.concatenate([cembs[wr[0]], tmp_word])))
-#         else:
-#             ret.append((dy.concatenate([cembs[-1] - cembs[wr[0]], tmp_word])))
-#
-#     return ret
-
-
 def word_embds(char_seq, bipos_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ranges):
-    ret = []
-
     lp_c = params["lp_c"]
     lp_w = params["lp_w"]
     lp_p = params["lp_p"]
-    lp_ps = params["lp_ps"]
-
-    if use_wif_wit:
-        lp_wif = params["lp_wif"]
-        lp_wit = params["lp_wit"]
-
-    wembs = []
 
     cembs = char_embds(char_seq, bipos_seq, word_ranges)
 
-    psp = (dy.concatenate([lp_p[td.x2i["SOS"]], lp_ps[tsd.x2i["SOS"]]]))
-    wft = (dy.concatenate([lp_wif[wifd.x2i["SOS"]], lp_wit[witd.x2i["SOS"]]]))
-    # wch = (dy.concatenate([lp_w[wd.x2i["SOS"]], lp_c[cd.x2i["SOS"]]]))
-    wch = (dy.concatenate([lp_w[wd.x2i["SOS"]], cembs[0]]))
-
-    R_w = dy.parameter(params["R_w"])
-    bias_w = dy.parameter(params["bias_w"])
-
-    R_p = dy.parameter(params["R_p"])
-    bias_p = dy.parameter(params["bias_p"])
-
-    R_wi = dy.parameter(params["R_wi"])
-    bias_wi = dy.parameter(params["bias_wi"])
-
-    wembs.append((R_p * psp + R_wi * wft + R_w * wch + bias_w + bias_p + bias_wi))
+    wembs = []
 
     for idx, wr in enumerate(word_ranges):
         str = ""
@@ -645,274 +316,51 @@ def word_embds(char_seq, bipos_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word
             str += cd.i2x[c]
             tmp_char.append(dy.dropout(lp_c[c], pdrop))
 
-        tmp_char_len = len(tmp_char)
+        # tmp_char_len = len(tmp_char)
+        # char_lps = dy.esum(tmp_char) / tmp_char_len
 
-        tmp_char = dy.esum(tmp_char) / tmp_char_len
-        # tmp_char = cembs[idx + 1]
+        pos_lp = lp_p[pos_seq[wr[0]]]
 
-        pos_sub_pos = bias_p + R_p * dy.concatenate([lp_p[pos_seq[wr[0]]], lp_ps[pos_sub_seq[idx]]])
-        wif_wit = bias_wi + R_wi * dy.concatenate([lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
-        tmp_word = pos_sub_pos + wif_wit
-        if TRAIN:
-            rnd_int = np.random.randint(0, 2)
-
-            if str in wd.x2i and rnd_int == 0:
-                tmp_word = bias_w + R_w * dy.concatenate(
-                    [dy.dropout(lp_w[wd.x2i[str]], pdrop), cembs[idx + 1]]) + tmp_word
-            else:
-                tmp_word = bias_w + R_w * dy.concatenate(
-                    [tmp_char, cembs[idx + 1]]) + tmp_word
+        if str in wd.x2i:
+            word_form = lp_w[wd.x2i[str]]
         else:
-            if str in wd.x2i:
-                tmp_word = bias_w + R_w * dy.concatenate(
-                    [lp_w[wd.x2i[str]], cembs[idx + 1]]) + tmp_word
-            else:
-                tmp_word = bias_w + R_w * dy.concatenate(
-                    [tmp_char, cembs[idx + 1]]) + tmp_word
+            word_form = pos_lp
 
-        wembs.append((tmp_word))
+        wembs.append(dy.concatenate([word_form, pos_lp, cembs[idx]]))
 
-    psp = (dy.concatenate([lp_p[td.x2i["EOS"]], lp_ps[tsd.x2i["EOS"]]]))
-    wft = (dy.concatenate([lp_wif[wifd.x2i["EOS"]], lp_wit[witd.x2i["EOS"]]]))
-    # wch = (dy.concatenate([lp_w[wd.x2i["EOS"]], lp_c[cd.x2i["EOS"]]]))
-    wch = (dy.concatenate([lp_w[wd.x2i["EOS"]], cembs[-1]]))
+    return wembs
 
-    wembs.append((R_p * psp + R_wi * wft + R_w * wch + bias_w + bias_wi + bias_p))
 
-    for widx in range(len(wembs)):
-       ret.append(dy.cube(wembs[widx]))
-
-    return ret
+# def concate_expr_seqs(lp_1, lp_2, seq1, seq2):
+#
+#     ret = [dy.concatenate([lp_1[seq1[i]], lp_2[seq2[i]]]) for i in range(len(seq1))]
+#
+#     return ret
 
 
 def char_embds(char_seq, bipos_seq, word_ranges):
     lp_c = params["lp_c"]
     lp_bp = params["lp_bp"]
 
-    cembs = [dy.concatenate([lp_c[cd.x2i["SOS"]], lp_bp[bpd.x2i["SOS"]]])] + \
-            [dy.concatenate([lp_c[char_seq[i]], lp_bp[bipos_seq[i]]]) for i in range(len(char_seq))] + \
-            [dy.concatenate([lp_c[cd.x2i["EOS"]], lp_bp[bpd.x2i["EOS"]]])]
-
+    cembs = [dy.concatenate([lp_c[char_seq[i]], lp_bp[bipos_seq[i]]]) for i in range(len(char_seq))]
 
     bidir, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop)
 
-    ret = [dy.concatenate([l2r_outs[1] - l2r_outs[0], r2l_outs[0] - r2l_outs[1]])]
+    # ret = [dy.concatenate([l2r_outs[1] - l2r_outs[0], r2l_outs[0] - r2l_outs[1]])]
+    ret = []
 
     for wr in word_ranges:
-        start = wr[0] + 1
-        end = wr[1] + 1
+        start = wr[0]
+        end = wr[1]
 
-        ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
+        if end < len(l2r_outs):
+            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
+        elif end - start <= 1:
+            ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
+        else:
+            ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
 
     return ret
-
-
-
-# def word_embds(char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ranges):
-#     ret = []
-#
-#     lp_c = params["lp_c"]
-#     lp_w = params["lp_w"]
-#     lp_p = params["lp_p"]
-#     lp_ps = params["lp_ps"]
-#
-#     if use_wif_wit:
-#         lp_wif = params["lp_wif"]
-#         lp_wit = params["lp_wit"]
-#
-#     psp_seq = []
-#     wft_seq = []
-#     wch_seq = []
-#     wembs = []
-#
-#     psp_seq.append(dy.concatenate([lp_p[td.x2i["SOS"]], lp_ps[tsd.x2i["SOS"]]]))
-#     wft_seq.append(dy.concatenate([lp_wif[wifd.x2i["SOS"]], lp_wit[witd.x2i["SOS"]]]))
-#     wch_seq.append(dy.concatenate([lp_w[wd.x2i["SOS"]], lp_c[cd.x2i["SOS"]]]))
-#
-#     psp = (dy.concatenate([lp_p[td.x2i["SOS"]], lp_ps[tsd.x2i["SOS"]]]))
-#     wft = (dy.concatenate([lp_wif[wifd.x2i["SOS"]], lp_wit[witd.x2i["SOS"]]]))
-#     wch = (dy.concatenate([lp_w[wd.x2i["SOS"]], lp_c[cd.x2i["SOS"]]]))
-#
-#     R_w = dy.parameter(params["R_w"])
-#     bias_w = dy.parameter(params["bias_w"])
-#
-#     R_p = dy.parameter(params["R_p"])
-#     bias_p = dy.parameter(params["bias_p"])
-#
-#     R_wi = dy.parameter(params["R_wi"])
-#     bias_wi = dy.parameter(params["bias_wi"])
-#
-#     R_b3 = dy.parameter(params["R_b3"])
-#     b3_bias = dy.parameter(params["b3_bias"])
-#
-#     # filter_2d = dy.parameter(params["filter_2d"])
-#
-#     # wembs.append(dy.cube(R_p * psp + R_wi * wft + R_w * wch + bias_w + bias_p + bias_wi))
-#     wembs.append((R_p * psp + R_wi * wft + R_w * wch + bias_w + bias_p + bias_wi))
-#
-#     for idx, wr in enumerate(word_ranges):
-#         str = ""
-#         tmp_char = []
-#         tmp_pos = []
-#
-#         for c in char_seq[wr[0]: wr[1]]:
-#             str += cd.i2x[c]
-#             tmp_char.append(dy.dropout(lp_c[c], pdrop))
-#
-#         for p in pos_seq[wr[0]: wr[1]]:
-#             tmp_pos.append(lp_p[p])
-#
-#         tmp_char_len = len(tmp_char)
-#
-#         tmp_char = dy.esum(tmp_char) / tmp_char_len
-#
-#         pos_sub_pos = bias_p + R_p * dy.concatenate([lp_p[pos_seq[wr[0]]], lp_ps[pos_sub_seq[idx]]])
-#         # pos_sub_pos = dy.concatenate([lp_p[pos_seq[wr[0]]], lp_ps[pos_sub_seq[idx]]])
-#         wif_wit = bias_wi + R_wi * dy.concatenate([lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
-#         # wif_wit = dy.concatenate([lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
-#         tmp_word = pos_sub_pos + wif_wit
-#         # tmp_word = dy.concatenate([pos_sub_pos, wif_wit])
-#         if TRAIN:
-#             rnd_int = np.random.randint(0, 2)
-#
-#             if str in wd.x2i and rnd_int == 0:
-#                 # tmp_word = dy.concatenate([dy.dropout(lp_w[wd.x2i[str]], pdrop), tmp_char])
-#                 # tmp_word = dy.concatenate([dy.dropout(lp_w[wd.x2i[str]], pdrop), tmp_word])
-#                 tmp_word = bias_w + R_w * dy.concatenate(
-#                     [dy.dropout(lp_w[wd.x2i[str]], pdrop), tmp_char]) + tmp_word
-#             else:
-#                 # tmp_word = dy.concatenate([tmp_char, tmp_char])
-#                 tmp_word = bias_w + R_w * dy.concatenate(
-#                     [tmp_char, tmp_char]) + tmp_word
-#         else:
-#             if str in wd.x2i:
-#                 # tmp_word = dy.concatenate([lp_w[wd.x2i[str]], tmp_char])
-#                 # tmp_word = dy.concatenate([lp_w[wd.x2i[str]], tmp_word])
-#                 tmp_word = bias_w + R_w * dy.concatenate(
-#                     [lp_w[wd.x2i[str]], tmp_char]) + tmp_word
-#             else:
-#                 # tmp_word = dy.concatenate([tmp_char, tmp_char])
-#                 # tmp_word = dy.concatenate([tmp_char, tmp_word])
-#                 tmp_word = bias_w + R_w * dy.concatenate(
-#                     [tmp_char, tmp_char]) + tmp_word
-#
-#         psp_seq.append(pos_sub_pos)
-#         wft_seq.append(wif_wit)
-#         wch_seq.append(tmp_word)
-#
-#         # wembs.append(dy.cube(tmp_word))
-#         wembs.append((tmp_word))
-#
-#         # if wr[1] < len(cembs):
-#         #     ret.append((dy.concatenate([cembs[wr[1]] - cembs[wr[0]], tmp_word])))
-#         # elif wr[0] == len(cembs) - 1:
-#         #     ret.append((dy.concatenate([cembs[wr[0]], tmp_word])))
-#         # else:
-#         #     ret.append((dy.concatenate([cembs[-1] - cembs[wr[0]], tmp_word])))
-#     psp_seq.append(dy.concatenate([lp_p[td.x2i["EOS"]], lp_ps[tsd.x2i["EOS"]]]))
-#     wft_seq.append(dy.concatenate([lp_wif[wifd.x2i["EOS"]], lp_wit[witd.x2i["EOS"]]]))
-#     wch_seq.append(dy.concatenate([lp_w[wd.x2i["EOS"]], lp_c[cd.x2i["EOS"]]]))
-#
-#     psp = (dy.concatenate([lp_p[td.x2i["EOS"]], lp_ps[tsd.x2i["EOS"]]]))
-#     wft = (dy.concatenate([lp_wif[wifd.x2i["EOS"]], lp_wit[witd.x2i["EOS"]]]))
-#     wch = (dy.concatenate([lp_w[wd.x2i["EOS"]], lp_c[cd.x2i["EOS"]]]))
-#
-#     # wembs.append(dy.cube(R_p * psp + R_wi * wft + R_w * wch + bias_w))
-#     wembs.append((R_p * psp + R_wi * wft + R_w * wch + bias_w + bias_wi + bias_p))
-#
-#     for widx in range(1, len(wembs) - 1):
-#         # psp = dy.concatenate([psp_seq[widx - 1], psp_seq[widx], psp_seq[widx + 1]])
-#         # wft = dy.concatenate([wft_seq[widx - 1], wft_seq[widx], wft_seq[widx + 1]])
-#         # wch = dy.concatenate([wch_seq[widx - 1], wch_seq[widx], wch_seq[widx + 1]])
-#         # wemb = dy.concatenate([psp, wft, wch], 1)
-#         # conv1 = dy.conv2d(wemb, filter_2d, [2, 2])
-#         # maxpool1 = dy.maxpooling2d(conv1, [2, 2], [1, 1])
-#
-#         ret.append(dy.cube(R_p * psp_seq[widx] + R_wi * wft_seq[widx] + R_w * wch_seq[widx] + bias_w))
-#         # ret.append(b3_bias + R_b3 * dy.concatenate([wembs[widx - 1], wembs[widx], wembs[widx + 1]]))
-#
-#     return ret
-
-
-# def bunsetsu_embds(wembs, bunsetsu_ranges):
-#     ret3 = []
-#
-#     if bemb_with_lstm:
-#         for br in bunsetsu_ranges:
-#             tmp = []
-#             if br[1] < len(wembs):
-#                 tmp.extend(inputs2lstmouts(l2rlstm_bemb, r2llstm_bemb, wembs[br[0]: br[1]], pdrop))
-#             elif br[0] == len(wembs) - 1:
-#                 tmp.extend(inputs2lstmouts(l2rlstm_bemb, r2llstm_bemb, [wembs[br[0]]], pdrop))
-#             else:
-#                 tmp.extend(inputs2lstmouts(l2rlstm_bemb, r2llstm_bemb, wembs[br[0]: br[-1]], pdrop))
-#             tmp_len = len(tmp)
-#             ret3.append(dy.esum(tmp) / tmp_len)
-#         return ret3
-#
-#
-#     ret = []
-#     ret2 = []
-#
-#     if bemb_attention:
-#         R_word_biaffine = dy.parameter(params["R_bemb_biaffine"])
-#
-#     if few_words_bemb:
-#         R_b1 = dy.parameter(params["R_b1"])
-#         R_b2 = dy.parameter(params["R_b2"])
-#         R_b3 = dy.parameter(params["R_b3"])
-#         b1_bias = dy.parameter(params["b1_bias"])
-#         b2_bias = dy.parameter(params["b2_bias"])
-#         b3_bias = dy.parameter(params["b3_bias"])
-#
-#
-#     for br in bunsetsu_ranges:
-#         if br[0] == 0:
-#             ret.append(dy.concatenate([wembs[1] - wembs[0], wembs[0] - wembs[1]]))
-#         elif br[1] < len(wembs):
-#             ret.append(dy.concatenate([wembs[br[1]] - wembs[br[0]], wembs[br[0]] - wembs[br[1]]]))
-#             welms = wembs[br[0]: br[1]]
-#         # elif br[0] == len(wembs) - 1:
-#         #     ret.append(wembs[br[0]])
-#         #     welms = [wembs[br[0]]]
-#         else:
-#             ret.append(dy.concatenate([wembs[-1] - wembs[br[0]], wembs[br[0]] - wembs[-1]]))
-#             # ret.append(wembs[-1] - wembs[br[0]])
-#             welms = wembs[br[0]: br[-1]]
-#         if bemb_attention:
-#             y = ret[-1]
-#             x = dy.concatenate(welms, 1)
-#             attention = dy.softsign(dy.transpose(bilinear(x, R_word_biaffine, y, word_HIDDEN_DIM, len(welms), 1, 1)))
-#             bemb = dy.cmult(dy.transpose(attention), dy.dropout(x, pdrop))
-#             bemb = dy.sum_dim(bemb, [1])
-#
-#             ret2.append(bemb)
-#         if few_words_bemb:
-#             if len(welms) == 1:
-#                 bemb = R_b1 * dy.concatenate(welms) + b1_bias
-#             elif len(welms) == 2:
-#                 bemb = R_b2 * dy.concatenate(welms) + b2_bias
-#             elif len(welms) == 3:
-#                 bemb = R_b3 * dy.concatenate(welms[-3:]) + b3_bias
-#             else:
-#                 bemb = R_b3 * dy.concatenate(welms[-3:]) + dy.esum(welms[:-3]) + b3_bias
-#             ret2.append(dy.dropout(bemb, pdrop))
-#     if next_bemb:
-#         bembs = ret
-#         ret = []
-#
-#         for bidx in range(len(bembs)):
-#             # ret.append(dy.concatenate([bembs[bidx - 1], bembs[bidx]]))
-#             ret.append(dy.concatenate([bembs[bidx], bembs[(bidx + 1) % len(bembs)]]))
-#
-#     if few_words_bemb:
-#         return ret2
-#
-#     if bemb_attention:
-#         return ret2
-#     else:
-#         return ret
-
 
 
 def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges):
@@ -920,10 +368,15 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges):
     ret = []
 
     for br in bunsetsu_ranges:
-        start = br[0] + 1
-        end = br[1] + 1
+        start = br[0]
+        end = br[1]
 
-        ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
+        if end < len(l2r_outs):
+            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
+        elif end - start <= 1:
+            ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
+        else:
+            ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
 
     return ret
 
@@ -956,15 +409,12 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
     prev = time.time()
 
     tot_loss_in_iter = 0
-    #trainer = dy.AdagradTrainer(pc, learning_rate)
 
     print(pdrop)
     print(pdrop_bunsetsu)
     print("done_sents", len(done_sents))
 
     for it in range(train_iter):
-        print("total loss in previous iteration: ", tot_loss_in_iter)
-        tot_loss_in_iter = 0
         print("iteration: ", it)
         num_tot_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep = 0
@@ -980,7 +430,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             if random_pickup:  idx = i if not TRAIN else np.random.randint(len(char_seqs))
             else: idx = i
 
-            if scheduled_learning and cor_parsed_count[idx] > 3:
+            if scheduled_learning and cor_parsed_count[idx] > 0:
                 done_sents.add(idx)
                 revise = np.random.randint(0, 10)
                 if revise < 8:
@@ -1045,7 +495,6 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
                 sum_losses_arcs.backward()
                 update_parameters()
                 global_step += 1
-                #trainer.update()
                 tot_loss_in_iter += sum_losses_arcs_value
 
             if i % show_loss_every == 0 and i != 0:

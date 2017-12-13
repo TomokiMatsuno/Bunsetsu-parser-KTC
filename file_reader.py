@@ -77,10 +77,8 @@ class Word:
                 bi = 'B'
             else:
                 bi = 'I'
-            if use_wif_wit:
-                bipos = bi + '_' + line[3]
-            else:
-                bipos = bi + '_' + line[3] + '_' + line[4]
+
+            bipos = bi + '_' + line[3] + '_' + line[4]
             if i == 0:
                 self.chars.append(Char(line[0][i], bipos, chunk_bi))
             else:
