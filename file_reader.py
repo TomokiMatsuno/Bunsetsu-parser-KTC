@@ -250,7 +250,7 @@ class DataFrameKtc(DataFrame):
             initial_entries = ["NULL", "UNK", "ROOT", "SOS", "EOS"]
         wd = Dict(doc_word_forms, initial_entries)
         cd = Dict(doc_char_forms, initial_entries)
-        bpd = Dict(doc_word_biposes, ["NULL", "B_ROOT"])
+        bpd = Dict(doc_word_biposes, ["NULL", "B_ROOT", "SOS", "EOS"])
         td = Dict(doc_pos, initial_entries)
         tsd = Dict(doc_pos_sub, initial_entries)
         wif = Dict(doc_word_inflection_forms, initial_entries)
