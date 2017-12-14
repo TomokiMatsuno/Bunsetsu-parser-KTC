@@ -310,19 +310,21 @@ def word_embds(char_seq, bipos_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word
 
     for idx, wr in enumerate(word_ranges):
         str = ""
-        tmp_char = []
+        # tmp_char = []
 
         for c in char_seq[wr[0]: wr[1]]:
             str += cd.i2x[c]
-            tmp_char.append(dy.dropout(lp_c[c], pdrop))
+            # tmp_char.append(dy.dropout(lp_c[c], pdrop))
 
         # tmp_char_len = len(tmp_char)
         # char_lps = dy.esum(tmp_char) / tmp_char_len
 
-        pos_lp = lp_p[pos_seq[wr[0]]]
+        rnd_int = np.random.randint(0, 4)
 
-        if str in wd.x2i:
-            word_form = lp_w[wd.x2i[str]]
+        pos_lp = dy.dropout(lp_p[pos_seq[wr[0]]], pdrop)
+
+        if str in wd.x2i and rnd_int == 0:
+            word_form = dy.dropout(lp_w[wd.x2i[str]], pdrop)
         else:
             word_form = pos_lp
 
@@ -342,7 +344,7 @@ def char_embds(char_seq, bipos_seq, word_ranges):
     lp_c = params["lp_c"]
     lp_bp = params["lp_bp"]
 
-    cembs = [dy.concatenate([lp_c[char_seq[i]], lp_bp[bipos_seq[i]]]) for i in range(len(char_seq))]
+    cembs = [dy.concatenate([dy.dropout(lp_c[char_seq[i]], pdrop), dy.dropout(lp_bp[bipos_seq[i]], pdrop)]) for i in range(len(char_seq))]
 
     bidir, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop)
 
