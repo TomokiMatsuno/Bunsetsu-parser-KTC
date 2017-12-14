@@ -404,7 +404,7 @@ cor_parsed_count = defaultdict(int)
 done_sents = set()
 
 def train(char_seqs, bipos_seqs, bi_b_seqs):
-    losses_bunsetsu = []
+    # losses_bunsetsu = []
     losses_arcs = []
     prev = time.time()
 
@@ -433,8 +433,9 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             if scheduled_learning and cor_parsed_count[idx] > 0:
                 done_sents.add(idx)
                 revise = np.random.randint(0, 10)
-                if revise < 8:
-                    continue
+                continue
+                # if revise < 8:
+                #     continue
 
             if len(char_seqs[idx]) == 0 or len(bi_b_seqs[idx]) == 0:
                 continue
@@ -454,15 +455,15 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             if use_wembs:
                 wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
-            loss_bi_bunsetsu, bi_bunsetsu_preds, _ = bi_bunsetsu_wembs(wembs, bi_w_seq)
-            losses_bunsetsu.append(loss_bi_bunsetsu)
-
-            if i % batch_size == 0 and i != 0:
-                loss_bi_bunsetsu_value = loss_bi_bunsetsu.value()
-
-            if i % show_loss_every == 0 and i != 0:
-                print(i, " bi_bunsetsu loss")
-                print(loss_bi_bunsetsu_value)
+            # loss_bi_bunsetsu, bi_bunsetsu_preds, _ = bi_bunsetsu_wembs(wembs, bi_w_seq)
+            # losses_bunsetsu.append(loss_bi_bunsetsu)
+            #
+            # if i % batch_size == 0 and i != 0:
+            #     loss_bi_bunsetsu_value = loss_bi_bunsetsu.value()
+            #
+            # if i % show_loss_every == 0 and i != 0:
+            #     print(i, " bi_bunsetsu loss")
+            #     print(loss_bi_bunsetsu_value)
 
             bunsetsu_ranges = bunsetsu_range(bi_w_seq)
 
@@ -476,19 +477,19 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
             num_tot_bunsetsu_dep += len(bembs) - 1
 
-            if len(bi_w_seq) == len(bi_bunsetsu_preds) and \
-                np.sum(np.equal(arc_preds, train_chunk_deps[idx])) == len(train_chunk_deps[idx]) and \
-                np.sum(np.equal(bi_bunsetsu_preds, bi_w_seq)) == len(bi_w_seq):
-                cor_parsed_count[idx] += 1
-            else:
-                if idx in done_sents:
-                    cor_parsed_count[idx] = 0
-                    done_sents.remove(idx)
+            # if len(bi_w_seq) == len(bi_bunsetsu_preds) and \
+            #     np.sum(np.equal(arc_preds, train_chunk_deps[idx])) == len(train_chunk_deps[idx]) and \
+            #     np.sum(np.equal(bi_bunsetsu_preds, bi_w_seq)) == len(bi_w_seq):
+            #     cor_parsed_count[idx] += 1
+            # else:
+            #     if idx in done_sents:
+            #         cor_parsed_count[idx] = 0
+            #         done_sents.remove(idx)
 
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
             global global_step
             if i % batch_size == 0 and i != 0:
-                losses_arcs.extend(losses_bunsetsu)
+                # losses_arcs.extend(losses_bunsetsu)
 
                 sum_losses_arcs = dy.esum(losses_arcs)
                 sum_losses_arcs_value = sum_losses_arcs.value()
@@ -566,31 +567,31 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         if use_wembs:
             wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
-        loss_bi_b, preds_bi_b, num_cor_bi_b = bi_bunsetsu_wembs(wembs, bi_w_seq)
-        num_tot_bi_b += len(wembs)
-        num_tot_cor_bi_b += num_cor_bi_b
-        if i % show_acc_every == 0 and i != 0:
-            print("accuracy chunking: ", num_tot_cor_bi_b / num_tot_bi_b)
-            print("loss chuncking: ", loss_bi_b.value())
+        # loss_bi_b, preds_bi_b, num_cor_bi_b = bi_bunsetsu_wembs(wembs, bi_w_seq)
+        # num_tot_bi_b += len(wembs)
+        # num_tot_cor_bi_b += num_cor_bi_b
+        # if i % show_acc_every == 0 and i != 0:
+        #     print("accuracy chunking: ", num_tot_cor_bi_b / num_tot_bi_b)
+        #     print("loss chuncking: ", loss_bi_b.value())
         gold_bunsetsu_ranges = bunsetsu_range(bi_w_seq)
 
-        failed_chunk = []
-        for bidx, br in enumerate(gold_bunsetsu_ranges[1:]):
-            start = br[0]
-            end = br[1]
-            if end == len(gold_bunsetsu_ranges):
-                end = - 1
-            if np.sum(np.equal(bi_w_seq[start: end], preds_bi_b[start: end])) != len(bi_w_seq[start: end]):
-                failed_chunk.append(bidx)
+        # failed_chunk = []
+        # for bidx, br in enumerate(gold_bunsetsu_ranges[1:]):
+        #     start = br[0]
+        #     end = br[1]
+        #     if end == len(gold_bunsetsu_ranges):
+        #         end = - 1
+        #     if np.sum(np.equal(bi_w_seq[start: end], preds_bi_b[start: end])) != len(bi_w_seq[start: end]):
+        #         failed_chunk.append(bidx)
 
 
-        remains = [True] * len(gold_bunsetsu_ranges)
-        for fc in failed_chunk:
-            remains[fc]
-            dev_chunk_deps[i]
-            chunks_excluded += np.sum(np.equal(dev_chunk_deps[i], fc)) + remains[fc]
-            remains = [r * (1 - d) for r, d in zip(remains, np.equal(dev_chunk_deps[i], fc))]
-            remains[fc] = False
+        # remains = [True] * len(gold_bunsetsu_ranges)
+        # for fc in failed_chunk:
+        #     remains[fc]
+        #     dev_chunk_deps[i]
+        #     chunks_excluded += np.sum(np.equal(dev_chunk_deps[i], fc)) + remains[fc]
+        #     remains = [r * (1 - d) for r, d in zip(remains, np.equal(dev_chunk_deps[i], fc))]
+        #     remains[fc] = False
 
 
         # pred_bunsetsu_ranges = bunsetsu_range(preds_bi_b)
@@ -600,29 +601,32 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
             bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
 
         if i % show_acc_every == 0 and i != 0:
-            loss_bi_b_value = loss_bi_b.value()
-            print(i, " bi_b loss")
-            print(loss_bi_b_value)
-            if num_tot_bi_b > 0:
-                print(i, " accuracy chunking ", num_tot_cor_bi_b / num_tot_bi_b)
+            # loss_bi_b_value = loss_bi_b.value()
+            # print(i, " bi_b loss")
+            # print(loss_bi_b_value)
+            # if num_tot_bi_b > 0:
+            #     print(i, " accuracy chunking ", num_tot_cor_bi_b / num_tot_bi_b)
             if num_tot_bunsetsu_dep > 0:
                 print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
                 print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
             print("time: ", time.time() - prev)
             prev = time.time()
-        if len(wembs) == num_cor_bi_b:
-            complete_chunking += 1
+        # if len(wembs) == num_cor_bi_b:
+        #     complete_chunking += 1
 
-        if len(dev_chunk_deps[i]) != len(bembs) - 1:
-            failed_chunking += 1
+        # if len(dev_chunk_deps[i]) != len(bembs) - 1:
+        #     failed_chunking += 1
             # continue
         arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs)
 
         num_tot_bunsetsu_dep += len(bembs) - 1
 
         # num_tot_cor_bunsetsu_dep += np.sum(np.equal(np.equal(arc_preds, dev_chunk_deps[i]), remains))
-        num_tot_cor_bunsetsu_dep += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds, dev_chunk_deps[i]))])
+        # num_tot_cor_bunsetsu_dep += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds, dev_chunk_deps[i]))])
         #num_tot_cor_bunsetsu_dep_not_argmax += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds_not_argmax[1:], dev_chunk_deps[i]))])
+        num_tot_cor_bunsetsu_dep += np.sum(
+            np.equal(arc_preds, dev_chunk_deps[i]))
+
         num_tot_cor_bunsetsu_dep_not_argmax += np.sum(
             np.equal(arc_preds_not_argmax[1:], dev_chunk_deps[i]))
 
@@ -635,18 +639,18 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         early_stop_count = 0
 
     with open(result_file, mode='a', encoding='utf-8') as f:
-        f.write(str(i) + " accuracy chunking " + str(num_tot_cor_bi_b / num_tot_bi_b) + '\n')
+        # f.write(str(i) + " accuracy chunking " + str(num_tot_cor_bi_b / num_tot_bi_b) + '\n')
         f.write(str(i) + " accuracy dep " + str(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)+ '\n')
-        f.write("complete chunking rate: " + str(complete_chunking / len(char_seqs))+ '\n')
-        f.write("failed_chunking rate: " + str(failed_chunking / len(char_seqs))+ '\n')
-        f.write("complete chunking: " + str(complete_chunking)+ '\n')
-        f.write("failed_chunking: " + str(failed_chunking)+ '\n')
+        # f.write("complete chunking rate: " + str(complete_chunking / len(char_seqs))+ '\n')
+        # f.write("failed_chunking rate: " + str(failed_chunking / len(char_seqs))+ '\n')
+        # f.write("complete chunking: " + str(complete_chunking)+ '\n')
+        # f.write("failed_chunking: " + str(failed_chunking)+ '\n')
         #f.write("total arc loss: " + str(total_loss) + '\n')
-    print("complete_chunking rate: " + str(complete_chunking / len(char_seqs)))
-    print("failed_chunking rate: " + str(failed_chunking / len(char_seqs)))
-    print("complete chunking: " + str(complete_chunking))
-    print("failed_chunking: " + str(failed_chunking))
-    print("chunks_excluded: ", chunks_excluded)
+    # print("complete_chunking rate: " + str(complete_chunking / len(char_seqs)))
+    # print("failed_chunking rate: " + str(failed_chunking / len(char_seqs)))
+    # print("complete chunking: " + str(complete_chunking))
+    # print("failed_chunking: " + str(failed_chunking))
+    # print("chunks_excluded: ", chunks_excluded)
     #print("total arc loss: " + str(total_loss))
     return
 
