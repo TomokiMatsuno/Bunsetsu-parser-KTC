@@ -53,12 +53,13 @@ save_file = 'Bunsetsu-parser-KTC' + \
             '_LAYERS-word' + str(LAYERS_word) + \
             '_LAYERS-bunsetsu' + str(LAYERS_bunsetsu) + \
             '_HIDDEN-DIM' + str(HIDDEN_DIM) + \
+            '_word-HIDDEN-DIM' + str(word_HIDDEN_DIM) + \
+            '_bunsetsu-HIDDEN-DIM' + str(bunsetsu_HIDDEN_DIM) + \
             '_INPUT-DIM' + str(INPUT_DIM) + \
             '_batch-size' + str(batch_size) + \
             '_learning-rate' + str(learning_rate) + \
             '_pdrop' + str(pdrop) + \
-            '_pdrop_bunsetsu' + str(pdrop_bunsetsu) + \
-            '_orthogonal'
+            '_pdrop_bunsetsu' + str(pdrop_bunsetsu)
 
 split_name = ""
 
@@ -69,12 +70,16 @@ elif STANDARD_SPLIT:
 elif MINI_SET:
     split_name = "_MINISET"
 
+save_file = save_file + split_name
 
 if bemb_attention:
     save_file = save_file + '_bembattn' + '-dropout' + str(pdrop)
 
 if bemb_lstm:
     save_file = save_file + '_bemblstm'
+
+if scheduled_learning:
+    save_file = save_file + '_scheduledLearning'
 
 load_file = save_file
 
