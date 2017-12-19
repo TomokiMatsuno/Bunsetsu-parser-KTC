@@ -58,9 +58,9 @@ save_file = 'Bunsetsu-parser-KTC' + \
             '_MLP-HIDDEN-DIM' + str(MLP_HIDDEN_DIM) + \
             '_INPUT-DIM' + str(INPUT_DIM) + \
             '_batch-size' + str(batch_size) + \
-            '_learning-rate' + str(learning_rate) + \
             '_pdrop' + str(pdrop) + \
             '_pdrop_bunsetsu' + str(pdrop_bunsetsu)
+            #'_learning-rate' + str(learning_rate) + \
 
 split_name = ""
 
@@ -79,12 +79,9 @@ if scheduled_learning:
 if bemb_attention:
     save_file = save_file + '_bembattn' + '-dropout' + str(pdrop)
 
-if bemb_lstm:
-    save_file = save_file + '_bemblstm'
-
 load_file = save_file
 
-result_file = save_file + "_result_accuracy.txt"
+result_file = save_file + "_result.txt"
 
 
 print(files)
@@ -241,12 +238,12 @@ def bi_bunsetsu_wembs(wembs, bi_w_seq):
         probs = dy.softmax(R_bi_b * wembs[i] + bias_bi_b)
         loss.append(-dy.log(dy.pick(probs, bi_w_seq[i])))
 
-        # if not TRAIN:
-        chosen = np.asscalar(np.argmax(probs.npvalue()))
-        preds.append(chosen)
-        if(chosen == bi_w_seq[i]):
-            # print(chosen, " ", bi_b_seq[w_1st_chars[i]])
-            num_cor += 1
+        if scheduled_learning or not TRAIN:
+            chosen = np.asscalar(np.argmax(probs.npvalue()))
+            preds.append(chosen)
+            if(chosen == bi_w_seq[i]):
+                # print(chosen, " ", bi_b_seq[w_1st_chars[i]])
+                num_cor += 1
     loss = dy.esum(loss)
     return loss, preds, num_cor
 
@@ -273,17 +270,20 @@ def dep_bunsetsu(bembs):
 
     blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_head, input_size, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
 
-    arc_preds_not_argmax = blin.npvalue().argmax(0)
-    msk = [1] * slen_x
-    # msk[0] = 0
-    arc_probs = dy.softmax(blin).npvalue()
-    # arc_probs = arc_probs[1:]
-    arc_probs = np.transpose(arc_probs)
-    arc_preds = arc_argmax(arc_probs, slen_x, msk)
-    arc_preds = arc_preds[1:]
+    arc_preds = []
+    arc_preds_not_argmax = []
+
+    if scheduled_learning or not TRAIN:
+        arc_preds_not_argmax = blin.npvalue().argmax(0)
+        msk = [1] * slen_x
+        # msk[0] = 0
+        arc_probs = dy.softmax(blin).npvalue()
+        # arc_probs = arc_probs[1:]
+        arc_probs = np.transpose(arc_probs)
+        arc_preds = arc_argmax(arc_probs, slen_x, msk)
+        arc_preds = arc_preds[1:]
     arc_loss = dy.reshape(blin, (slen_y,), slen_x)
     arc_loss = dy.pick_batch_elems(arc_loss, [i for i in range(1, slen_x)])
-
 
     return arc_loss, arc_preds, arc_preds_not_argmax
 
@@ -500,11 +500,21 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
             wembs = word_embds(char_seqs[idx], train_word_bipos_seqs[idx], train_pos_seqs[idx],
                                train_pos_sub_seqs[idx], train_wif_seqs[idx], train_wit_seqs[idx], word_ranges)
+            # print("wembs: ", time.time() - prev)
+            # prev = time.time()
+
             if use_wembs:
                 wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
+            # print("wembs_lstm: ", time.time() - prev)
+            # prev = time.time()
+
             loss_bi_bunsetsu, bi_bunsetsu_preds, _ = bi_bunsetsu_wembs(wembs, bi_w_seq)
             losses_bunsetsu.append(loss_bi_bunsetsu)
+
+            # print("bi_bunsetsu_wembs: ", time.time() - prev)
+            # prev = time.time()
+
 
             if i % batch_size == 0 and i != 0:
                 loss_bi_bunsetsu_value = loss_bi_bunsetsu.value()
@@ -516,39 +526,63 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             bunsetsu_ranges = bunsetsu_range(bi_w_seq)
 
             bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges)
+
+            # print("bunsestsu_embds: ", time.time() - prev)
+            # prev = time.time()
+
+
             if bemb_lstm:
                 bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
+
+            # print("bemb_lstm: ", time.time() - prev)
+            # prev = time.time()
+
             arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs)
 
-            num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, train_chunk_deps[idx]))
-            num_tot_cor_bunsetsu_dep_not_argmax += np.sum(np.equal(arc_preds_not_argmax[1:], train_chunk_deps[idx]))
+            # print("dep_bunsetsu: ", time.time() - prev)
+            # prev = time.time()
+
+            if scheduled_learning:
+                num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, train_chunk_deps[idx]))
+                num_tot_cor_bunsetsu_dep_not_argmax += np.sum(np.equal(arc_preds_not_argmax[1:], train_chunk_deps[idx]))
 
             num_tot_bunsetsu_dep += len(bembs) - 1
 
-            if len(bi_w_seq) == len(bi_bunsetsu_preds) and \
-                np.sum(np.equal(arc_preds, train_chunk_deps[idx])) == len(train_chunk_deps[idx]) and \
-                np.sum(np.equal(bi_bunsetsu_preds, bi_w_seq)) == len(bi_w_seq):
-                cor_parsed_count[idx] += 1
-            else:
-                if idx in done_sents:
-                    cor_parsed_count[idx] = 0
-                    done_sents.remove(idx)
+            if scheduled_learning:
+                if len(bi_w_seq) == len(bi_bunsetsu_preds) and \
+                    np.sum(np.equal(arc_preds, train_chunk_deps[idx])) == len(train_chunk_deps[idx]) and \
+                    np.sum(np.equal(bi_bunsetsu_preds, bi_w_seq)) == len(bi_w_seq):
+
+                    cor_parsed_count[idx] += 1
+                else:
+                    if idx in done_sents:
+                        cor_parsed_count[idx] = 0
+                        done_sents.remove(idx)
 
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
             global global_step
             if i % batch_size == 0 and i != 0:
+                prev = time.time()
+
                 losses_arcs.extend(losses_bunsetsu)
 
                 sum_losses_arcs = dy.esum(losses_arcs)
                 sum_losses_arcs_value = sum_losses_arcs.value()
+
+                # print("forward: ", time.time() - prev)
+                # prev = time.time()
+
                 sum_losses_arcs.backward()
                 update_parameters()
                 global_step += 1
                 tot_loss_in_iter += sum_losses_arcs_value
 
+                # print("backward: ", time.time() - prev)
+                # prev = time.time()
+
             if i % show_loss_every == 0 and i != 0:
-                print("time: ", time.time() - prev)
-                prev = time.time()
+                # print("time: ", time.time() - prev)
+                # prev = time.time()
                 print(i, " arcs loss")
                 print(sum_losses_arcs_value)
                 print(train_sents[idx].word_forms)
@@ -686,15 +720,15 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         best_acc = num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep
         update = True
         early_stop_count = 0
-
-    with open(result_file, mode='a', encoding='utf-8') as f:
-        f.write(str(i) + " accuracy chunking " + str(num_tot_cor_bi_b / num_tot_bi_b) + '\n')
-        f.write(str(i) + " accuracy dep " + str(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)+ '\n')
-        f.write("complete chunking rate: " + str(complete_chunking / len(char_seqs))+ '\n')
-        f.write("failed_chunking rate: " + str(failed_chunking / len(char_seqs))+ '\n')
-        f.write("complete chunking: " + str(complete_chunking)+ '\n')
-        f.write("failed_chunking: " + str(failed_chunking)+ '\n')
-        #f.write("total arc loss: " + str(total_loss) + '\n')
+    if output_result:
+        with open(result_file, mode='a', encoding='utf-8') as f:
+            f.write(str(i) + " accuracy chunking " + str(num_tot_cor_bi_b / num_tot_bi_b) + '\n')
+            f.write(str(i) + " accuracy dep " + str(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)+ '\n')
+            f.write("complete chunking rate: " + str(complete_chunking / len(char_seqs))+ '\n')
+            f.write("failed_chunking rate: " + str(failed_chunking / len(char_seqs))+ '\n')
+            f.write("complete chunking: " + str(complete_chunking)+ '\n')
+            f.write("failed_chunking: " + str(failed_chunking)+ '\n')
+            #f.write("total arc loss: " + str(total_loss) + '\n')
     print("complete_chunking rate: " + str(complete_chunking / len(char_seqs)))
     print("failed_chunking rate: " + str(failed_chunking / len(char_seqs)))
     print("complete chunking: " + str(complete_chunking))
@@ -710,13 +744,20 @@ if LOAD:
     pc.populate(load_file)
     print("loaded from: ", load_file)
 
+prev_epoc = 0
+
 for e in range(epoc):
-    print("time: ", time.time() - prev)
-    prev = time.time()
-    print("epoc: ", e)
-    with open(result_file, mode='a', encoding='utf-8') as f:
-        f.write("time: " + str(prev) + '\n')
-        f.write("epoc: " + str(e) + '\n')
+
+    if e * train_iter >= 30 and train_iter != 1:
+        train_iter = 1
+
+    print("epoc: ", prev_epoc)
+    prev_epoc += train_iter
+
+    if output_result:
+        with open(result_file, mode='a', encoding='utf-8') as f:
+            f.write("time: " + str(prev) + '\n')
+            f.write("epoc: " + str(prev_epoc) + '\n')
 
     TRAIN = True
     global pdrop
@@ -735,7 +776,10 @@ for e in range(epoc):
 
     global early_stop_count
     if not update:
-        early_stop_count += 1
+        early_stop_count += train_iter
+
+    print("time: ", time.time() - prev)
+    prev = time.time()
 
     if SAVE and not TEST and update:
         pc.save(save_file)
@@ -747,3 +791,12 @@ for e in range(epoc):
             f.write("best_acc: " + str(best_acc))
 
         break
+    else:
+        print("best_acc: ", best_acc)
+        print("early_stop_count: ", early_stop_count)
+        with open(result_file, mode='a', encoding='utf-8') as f:
+            f.write("best_acc: " + str(best_acc) + '\n')
+            f.write("early_stop_count: " + str(early_stop_count) + '\n')
+
+
+
