@@ -176,12 +176,19 @@ if not orthonormal:
 else:
     l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
     r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
+    if not lstm_4:
+        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
+        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
 
-    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
-    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
+        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 
-    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    else:
+        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 6, word_HIDDEN_DIM, pc)
+        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 6, word_HIDDEN_DIM, pc)
+
+        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
 
 
 params = {}
@@ -401,13 +408,22 @@ def char_embds(char_seq, bipos_seq, word_ranges):
     for wr in word_ranges:
         start = wr[0]
         end = wr[1]
-
-        if end < len(l2r_outs):
-            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
-        elif end - start <= 1:
-            ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
+        if not lstm_4:
+            if end < len(l2r_outs):
+                ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
+            elif end - start <= 1:
+                ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
+            else:
+                ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
         else:
-            ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
+            if end < len(l2r_outs):
+                ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], l2r_outs[start] - l2r_outs[end], r2l_outs[start] - r2l_outs[end], r2l_outs[end] - r2l_outs[start]]))
+            elif end - start <= 1:
+                ret.append(dy.concatenate([l2r_outs[-1], l2r_outs[-1], r2l_outs[-1], r2l_outs[-1]]))
+            else:
+                ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], l2r_outs[start] - l2r_outs[-1], r2l_outs[start] - r2l_outs[-1], r2l_outs[-1] - r2l_outs[start]]))
+
+
 
     return ret
 
@@ -420,12 +436,21 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges):
         start = br[0]
         end = br[1]
 
-        if end < len(l2r_outs):
-            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
-        elif end - start <= 1:
-            ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
+        if not lstm_4:
+            if end < len(l2r_outs):
+                ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
+            elif end - start <= 1:
+                ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
+            else:
+                ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
         else:
-            ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
+            if end < len(l2r_outs):
+                ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], l2r_outs[start] - l2r_outs[end], r2l_outs[start] - r2l_outs[end], r2l_outs[end] - r2l_outs[start]]))
+            elif end - start <= 1:
+                ret.append(dy.concatenate([l2r_outs[-1], l2r_outs[-1], r2l_outs[-1], r2l_outs[-1]]))
+            else:
+                ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], l2r_outs[start] - l2r_outs[-1], r2l_outs[start] - r2l_outs[-1], r2l_outs[-1] - r2l_outs[start]]))
+
 
     return ret
 
@@ -457,7 +482,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
     losses_arcs = []
     prev = time.time()
 
-    tot_loss_in_iter = 0
+
 
     print(pdrop)
     print(pdrop_bunsetsu)
@@ -468,6 +493,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
         num_tot_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep_not_argmax = 0
+        tot_loss_in_iter = 0
 
         for i in (range(len(char_seqs))):
             if i % batch_size == 0:
@@ -562,7 +588,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
             global global_step
             if i % batch_size == 0 and i != 0:
-                prev = time.time()
+                #prev = time.time()
 
                 losses_arcs.extend(losses_bunsetsu)
 
@@ -592,7 +618,9 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
                 print("dep accuracy: ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
                 print("dep accuracy not argmax: ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
-    print("total loss in this epoch: ", tot_loss_in_iter)
+        print("time in this iter: ", time.time() - prev)
+        prev = time.time()
+        print("total loss in this iter: ", tot_loss_in_iter)
 
 
 def word_bi(bi_w_seq, bi_b_seq):
@@ -748,7 +776,7 @@ prev_epoc = 0
 
 for e in range(epoc):
 
-    if e * train_iter >= 30 and train_iter != 1:
+    if e * train_iter >= change_train_iter and train_iter != 1:
         train_iter = 1
 
     print("epoc: ", prev_epoc)
