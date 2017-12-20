@@ -168,27 +168,32 @@ if not orthonormal:
     l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
     r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
 
-    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
-    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
+    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 6, word_HIDDEN_DIM, pc)
+    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 6, word_HIDDEN_DIM, pc)
 
-    l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    l2rlstm_bemb = dy.VanillaLSTMBuilder(LAYERS_word, word_HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+    r2llstm_bemb = dy.VanillaLSTMBuilder(LAYERS_word, word_HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+
+    l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
+    r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
 else:
     l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
     r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
     if not lstm_4:
-        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
-        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
+        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 6, word_HIDDEN_DIM, pc)
+        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 6, word_HIDDEN_DIM, pc)
+
+        l2rlstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, word_HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
+        r2llstm_bemb = orthonormal_VanillaLSTMBuilder(LAYERS_word, word_HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
 
         l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
         r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-
     else:
         l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 6, word_HIDDEN_DIM, pc)
         r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 6, word_HIDDEN_DIM, pc)
 
-        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
+        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
 
 
 params = {}
@@ -200,9 +205,12 @@ params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, INPUT_DIM))
 params["lp_wif"] = pc.add_lookup_parameters((WIF_SIZE + 1, INPUT_DIM))
 params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, INPUT_DIM))
 
-
-params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 2))
-params["bias_bi_b"] = pc.add_parameters((2))
+if use_wembs:
+    params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 2))
+    params["bias_bi_b"] = pc.add_parameters((2))
+else:
+    params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 6))
+    params["bias_bi_b"] = pc.add_parameters((2))
 
 params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * 2))
 params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
@@ -400,6 +408,9 @@ def char_embds(char_seq, bipos_seq, word_ranges):
     #cembs = [dy.concatenate([lp_c[char_seq[i]], lp_bp[bipos_seq[i]]]) for i in range(len(char_seq))]
     cembs = [lp_c[char_seq[i]] for i in range(len(char_seq))]
 
+    if segment_sides:
+        return segment_embds(l2rlstm_char, r2llstm_char, cembs, word_ranges)
+
     bidir, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop)
 
     # ret = [dy.concatenate([l2r_outs[1] - l2r_outs[0], r2l_outs[0] - r2l_outs[1]])]
@@ -422,8 +433,6 @@ def char_embds(char_seq, bipos_seq, word_ranges):
                 ret.append(dy.concatenate([l2r_outs[-1], l2r_outs[-1], r2l_outs[-1], r2l_outs[-1]]))
             else:
                 ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], l2r_outs[start] - l2r_outs[-1], r2l_outs[start] - r2l_outs[-1], r2l_outs[-1] - r2l_outs[start]]))
-
-
 
     return ret
 
@@ -453,6 +462,44 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges):
 
 
     return ret
+
+
+def segment_embds(l2rlstm, r2llstm, inputs, ranges):
+    # s_l2r_0 = l2rlstm.initial_state()
+    # s_r2l_0 = r2llstm.initial_state()
+    #
+    # l2rlstm.set_dropouts(pdrop, pdrop)
+    # r2llstm.set_dropouts(pdrop, pdrop)
+
+    # s_l2r = s_l2r_0
+    # s_r2l = s_r2l_0
+    #
+    # l2r_outs = s_l2r.add_inputs(inputs)
+    # r2l_outs = s_r2l.add_inputs(reversed(inputs))
+
+    ret = []
+
+    for r in ranges:
+        start = r[0]
+        end = r[1]
+
+        lstmouts, _, _ = inputs2lstmouts(l2rlstm, r2llstm, inputs[start: end], pdrop)
+        ret.append(dy.concatenate([lstmouts[0], lstmouts[-1]]))
+
+        # if end < len(l2r_outs):
+        #     ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
+        # elif end - start <= 1:
+        #     ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
+        # else:
+        #     ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
+
+    # lstm_outs = [dy.concatenate([l2r_outs[i].output(), r2l_outs[i].output()]) for i in range(len(l2r_outs))]
+    # l2r_outs = [l2r_outs[i].output() for i in range(len(l2r_outs))]
+    # r2l_outs = [r2l_outs[i].output() for i in range(len(r2l_outs))]
+
+    return ret
+
+
 
 
 def bilinear(x, W, y, input_size, seq_len_x, seq_len_y, batch_size, num_outputs=1, bias_x=False, bias_y=False):
@@ -538,10 +585,6 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             loss_bi_bunsetsu, bi_bunsetsu_preds, _ = bi_bunsetsu_wembs(wembs, bi_w_seq)
             losses_bunsetsu.append(loss_bi_bunsetsu)
 
-            # print("bi_bunsetsu_wembs: ", time.time() - prev)
-            # prev = time.time()
-
-
             if i % batch_size == 0 and i != 0:
                 loss_bi_bunsetsu_value = loss_bi_bunsetsu.value()
 
@@ -551,11 +594,13 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
             bunsetsu_ranges = bunsetsu_range(bi_w_seq)
 
-            bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges)
-
             # print("bunsestsu_embds: ", time.time() - prev)
             # prev = time.time()
 
+            if segment_sides:
+                bembs = segment_embds(l2rlstm_bemb, r2llstm_bemb, wembs, bunsetsu_ranges)
+            else:
+                bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges)
 
             if bemb_lstm:
                 bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
@@ -706,7 +751,11 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
 
         # pred_bunsetsu_ranges = bunsetsu_range(preds_bi_b)
 
-        bembs = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges)
+        if segment_sides:
+            bembs = segment_embds(l2rlstm_bemb, r2llstm_bemb, wembs, gold_bunsetsu_ranges)
+        else:
+            bembs = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges)
+
         if bemb_lstm:
             bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
 
