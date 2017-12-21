@@ -168,8 +168,8 @@ if not orthonormal:
     l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
     r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
 
-    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 6, word_HIDDEN_DIM, pc)
-    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 6, word_HIDDEN_DIM, pc)
+    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
+    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
 
     l2rlstm_bemb = dy.VanillaLSTMBuilder(LAYERS_word, word_HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
     r2llstm_bemb = dy.VanillaLSTMBuilder(LAYERS_word, word_HIDDEN_DIM * 2, word_HIDDEN_DIM, pc)
@@ -318,6 +318,21 @@ def bunsetsu_range(bi_bunsetsu_seq):
     return ret
 
 
+def aux_position(bunsetsu_ranges, pos_seq):
+    ret = []
+
+    for br in bunsetsu_ranges:
+        ret.append(-1)
+        for widx in range(br[1] - br[0]):
+            if (td.i2x[pos_seq[br[0] + widx]])[0] == '助':
+                ret[-1] = widx
+                break
+
+    return ret
+
+
+
+
 def word_range(bipos_seq):
     ret = [(0, 1)]
     start = 1
@@ -437,29 +452,61 @@ def char_embds(char_seq, bipos_seq, word_ranges):
     return ret
 
 
-def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges):
+def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
 
     ret = []
 
-    for br in bunsetsu_ranges:
+    for br, aux_idx in zip(bunsetsu_ranges, aux_position):
         start = br[0]
         end = br[1]
 
-        if not lstm_4:
+        if not cont_aux_separated:
             if end < len(l2r_outs):
                 ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
             elif end - start <= 1:
                 ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
             else:
                 ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
-        else:
+        elif aux_idx != -1 and (start + aux_idx) < len(l2r_outs):
             if end < len(l2r_outs):
-                ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], l2r_outs[start] - l2r_outs[end], r2l_outs[start] - r2l_outs[end], r2l_outs[end] - r2l_outs[start]]))
+                ret.append(dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start],
+                                           r2l_outs[start] - r2l_outs[start + aux_idx],
+                                           l2r_outs[end] - l2r_outs[start + aux_idx],
+                                           r2l_outs[start + aux_idx] - r2l_outs[end]]))
             elif end - start <= 1:
-                ret.append(dy.concatenate([l2r_outs[-1], l2r_outs[-1], r2l_outs[-1], r2l_outs[-1]]))
+                ret.append(dy.concatenate([l2r_outs[-1],
+                                           r2l_outs[-1],
+                                           l2r_outs[-1],
+                                           r2l_outs[-1]]))
             else:
-                ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], l2r_outs[start] - l2r_outs[-1], r2l_outs[start] - r2l_outs[-1], r2l_outs[-1] - r2l_outs[start]]))
-
+                ret.append(dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start],
+                                           r2l_outs[start] - r2l_outs[start + aux_idx],
+                                           l2r_outs[-1] - l2r_outs[start + aux_idx],
+                                           r2l_outs[start + aux_idx] - r2l_outs[-1]]))
+        else:
+            # if end < len(l2r_outs):
+            #     ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end],
+            #                                l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
+            # elif end - start <= 1:
+            #     ret.append(dy.concatenate([l2r_outs[-1], l2r_outs[-1], r2l_outs[-1], r2l_outs[-1]]))
+            # else:
+            #     ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1],
+            #                                l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
+            if end < len(l2r_outs):
+                ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start],
+                                           r2l_outs[start] - r2l_outs[end],
+                                           l2r_outs[end] - l2r_outs[end],
+                                           r2l_outs[start] - r2l_outs[start]]))
+            elif end - start <= 1:
+                ret.append(dy.concatenate([l2r_outs[-1],
+                                           r2l_outs[-1],
+                                           r2l_outs[-1] - r2l_outs[-1],
+                                           r2l_outs[-1] - r2l_outs[-1]]))
+            else:
+                ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start],
+                                           r2l_outs[start] - r2l_outs[-1],
+                                           l2r_outs[-1] - l2r_outs[-1],
+                                           r2l_outs[-1] - r2l_outs[-1]]))
 
     return ret
 
@@ -521,6 +568,19 @@ def bilinear(x, W, y, input_size, seq_len_x, seq_len_y, batch_size, num_outputs=
     # seq_len_y x num_outputs x seq_len_x else
     return blin
 
+def chunk_embds(pos_seq, ranges):
+    pos_seq
+
+
+def word_pos(pos_seq, word_ranges):
+    ret = []
+
+    for wr in word_ranges:
+        ret.append(pos_seq[wr[0]])
+
+    return ret
+
+
 cor_parsed_count = defaultdict(int)
 done_sents = set()
 
@@ -568,6 +628,8 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             bi_w_seq = word_bi(bi_w_seq, bi_b_seqs[idx])
 
             word_ranges = word_range(bipos_seqs[idx])
+            word_pos_seqs = word_pos(train_pos_seqs[idx], word_ranges)
+
             # wembs = word_embds(cembs, char_seqs[idx], train_pos_seqs[idx],
             #                    train_pos_sub_seqs[idx], train_wif_seqs[idx], train_wit_seqs[idx], word_ranges)
 
@@ -593,6 +655,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
                 print(loss_bi_bunsetsu_value)
 
             bunsetsu_ranges = bunsetsu_range(bi_w_seq)
+            aux_positions = aux_position(bunsetsu_ranges, word_pos_seqs)
 
             # print("bunsestsu_embds: ", time.time() - prev)
             # prev = time.time()
@@ -600,7 +663,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             if segment_sides:
                 bembs = segment_embds(l2rlstm_bemb, r2llstm_bemb, wembs, bunsetsu_ranges)
             else:
-                bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges)
+                bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_positions)
 
             if bemb_lstm:
                 bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
@@ -715,6 +778,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         num_tot += len(char_seqs[i])
 
         word_ranges = word_range(bipos_seqs[i])
+        word_pos_seq = word_pos(dev_pos_seqs[i], word_ranges)
         # wembs = word_embds(cembs, char_seqs[i], dev_pos_seqs[i],
         #                    dev_pos_sub_seqs[i], dev_wif_seqs[i], dev_wit_seqs[i], word_ranges)
         wembs = word_embds(char_seqs[i], dev_word_bipos_seqs[i], dev_pos_seqs[i],
@@ -754,7 +818,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         if segment_sides:
             bembs = segment_embds(l2rlstm_bemb, r2llstm_bemb, wembs, gold_bunsetsu_ranges)
         else:
-            bembs = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges)
+            bembs = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges, word_pos_seq)
 
         if bemb_lstm:
             bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
