@@ -326,8 +326,8 @@ def char_embds(char_seq, bipos_seq, word_ranges):
             ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
         else:
             ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
-
-    ret = [dy.tanh(r) for r in ret]
+    if tanh:
+        ret = [dy.tanh(r) for r in ret]
     return ret
 
 
@@ -410,20 +410,20 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
             if end < len(l2r_outs):
                 ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start],
                                            r2l_outs[start] - r2l_outs[end],
-                                           l2r_outs[end] - l2r_outs[end],
-                                           r2l_outs[start] - r2l_outs[start]]))
+                                           l2r_outs[end] - l2r_outs[start],
+                                           r2l_outs[start] - r2l_outs[end]]))
             elif end - start <= 1:
                 ret.append(dy.concatenate([l2r_outs[-1],
                                            r2l_outs[-1],
-                                           r2l_outs[-1] - r2l_outs[-1],
-                                           r2l_outs[-1] - r2l_outs[-1]]))
+                                           r2l_outs[-1],
+                                           r2l_outs[-1]]))
             else:
                 ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start],
                                            r2l_outs[start] - r2l_outs[-1],
-                                           l2r_outs[-1] - l2r_outs[-1],
-                                           r2l_outs[-1] - r2l_outs[-1]]))
-
-    ret = [dy.tanh(r) for r in ret]
+                                           l2r_outs[-1] - l2r_outs[start],
+                                           r2l_outs[start] - r2l_outs[-1]]))
+    if tanh:
+        ret = [dy.tanh(r) for r in ret]
 
     return ret
 
