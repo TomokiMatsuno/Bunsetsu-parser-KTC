@@ -322,8 +322,8 @@ def char_embds(char_seq, bipos_seq, word_ranges):
     for wr in word_ranges[1: -1]:
         start = wr[0]
         end = wr[1]
-        if end < len(l2r_outs):
-            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
+        if end < len(l2r_outs) or True:
+            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start + 1], r2l_outs[start] - r2l_outs[end - 1]]))
     if tanh:
         ret = [dy.tanh(r) for r in ret]
     return ret
@@ -381,48 +381,39 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
 
     lp_func = params["lp_func"]
 
-    for br, aux_idx in zip(bunsetsu_ranges[1: -1], aux_position[1: -1]):
+    for br, aux_idx in zip(bunsetsu_ranges[2: -2], aux_position[2: -2]):
         start = br[0] - 1
-        end = br[1]
+        # start = br[0]
+        end = br[1] - 1
 
         if not cont_aux_separated:
-            if end < len(l2r_outs):
-                ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
-            elif end - start <= 1:
-                ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
-            else:
-                ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
-        elif aux_idx != -1 and (start + aux_idx) < len(l2r_outs):
-            if end < len(l2r_outs):
-                ret.append(dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start],
-                                           r2l_outs[start] - r2l_outs[start + aux_idx],
-                                           l2r_outs[end] - l2r_outs[start + aux_idx],
-                                           r2l_outs[start + aux_idx] - r2l_outs[end]]))
-            elif end - start <= 1:
-                ret.append(dy.concatenate([l2r_outs[-1],
-                                           r2l_outs[-1],
-                                           l2r_outs[-1],
-                                           r2l_outs[-1]]))
-            else:
-                ret.append(dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start],
-                                           r2l_outs[start] - r2l_outs[start + aux_idx],
-                                           l2r_outs[-1] - l2r_outs[start + aux_idx],
-                                           r2l_outs[start + aux_idx] - r2l_outs[-1]]))
+            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start + 1],
+                                       r2l_outs[start] - r2l_outs[end - 1]]))
+            # if end + 1 < len(l2r_outs):
+            #     ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start - 1], r2l_outs[start] - r2l_outs[end + 1]]))
+            # elif end - start <= 1:
+            #     ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
+            # else:
+            #     ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start - 1], r2l_outs[start] - r2l_outs[-1]]))
+        elif aux_idx != -1:
+            ret.append(dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start + 1],
+                                       r2l_outs[start] - r2l_outs[start + aux_idx - 1],
+                                       l2r_outs[end] - l2r_outs[start + aux_idx + 1],
+                                       r2l_outs[start + aux_idx] - r2l_outs[end - 1]]))
         else:
-            if end < len(l2r_outs):
-                ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start],
-                                           r2l_outs[start] - r2l_outs[end],
-                                           lp_func[0], lp_func[1]]))
-                                           # l2r_outs[end] - l2r_outs[start],
-                                           # r2l_outs[start] - r2l_outs[end]]))
-            elif end - start <= 1:
-                ret.append(dy.concatenate([l2r_outs[-1],
-                                           r2l_outs[-1],
-                                           lp_func[0], lp_func[1]]))
-            else:
-                ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start],
-                                           r2l_outs[start] - r2l_outs[-1],
-                                           lp_func[0], lp_func[1]]))
+            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start + 1],
+                                       r2l_outs[start] - r2l_outs[end - 1],
+                                       lp_func[0], lp_func[1]]))
+                                       # l2r_outs[end] - l2r_outs[start],
+                                       # r2l_outs[start] - r2l_outs[end]]))
+            # elif end - start <= 1:
+            #     ret.append(dy.concatenate([l2r_outs[-1],
+            #                                r2l_outs[-1],
+            #                                lp_func[0], lp_func[1]]))
+            # else:
+            #     ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start + 1],
+            #                                r2l_outs[start] - r2l_outs[-2],
+            #                                lp_func[0], lp_func[1]]))
                                            # l2r_outs[-1] - l2r_outs[start],
                                            # r2l_outs[start] - r2l_outs[-1]]))
     if tanh:
@@ -492,7 +483,10 @@ def aux_position(bunsetsu_ranges, pos_seq):
     for br in bunsetsu_ranges:
         ret.append(-1)
         for widx in range(br[1] - br[0]):
-            if (td.i2x[pos_seq[br[0] + widx]])[0] == '助':
+            ch1 = (td.i2x[pos_seq[br[0] + widx]])[0]
+            ch2 = (td.i2x[pos_seq[br[0] + widx]])[-1]
+
+            if ch1 == '助' or ch1 == '判' or ch2 == '点':
                 ret[-1] = widx
                 break
 
@@ -599,7 +593,6 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
                 tot_loss_in_iter += sum_losses_arcs_value
 
             if i % show_loss_every == 0 and i != 0:
-                print(i)
                 if show_acc:
                     print("dep accuracy: ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
                     print("dep accuracy not argmax: ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
@@ -670,8 +663,8 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
                 chunks_excluded += np.sum(np.equal(dev_chunk_deps[i], fc)) + remains[fc]
                 remains = [r * (1 - d) for r, d in zip(remains, np.equal(dev_chunk_deps[i], fc))]
                 remains[fc] = False
-
-        bembs = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges, word_pos_seq)
+        aux_positions = aux_position(gold_bunsetsu_ranges, word_pos_seq)
+        bembs = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges, aux_positions)
 
         bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
 
