@@ -4,6 +4,7 @@ import numpy as np
 import dynet as dy
 
 from config import *
+import config
 from utils import *
 
 from tarjan import *
@@ -189,6 +190,8 @@ params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, INPUT_DIM))
 params["lp_wif"] = pc.add_lookup_parameters((WIF_SIZE + 1, INPUT_DIM))
 params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, INPUT_DIM))
 
+params["lp_func"] = pc.add_lookup_parameters((2, word_HIDDEN_DIM))
+
 params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
 
@@ -229,7 +232,7 @@ def bi_bunsetsu_wembs(wembs, bi_w_seq):
     loss = []
     preds = []
 
-    for i in range(len(bi_w_seq)):
+    for i in range(len(bi_w_seq) - config.BOS_EOS * 2):
         probs = dy.softmax(R_bi_b * wembs[i] + bias_bi_b)
         loss.append(-dy.log(dy.pick(probs, bi_w_seq[i])))
 
@@ -248,7 +251,6 @@ def dep_bunsetsu(bembs):
     dep_MLP_bias = dy.parameter(params["dep_MLP_bias"])
     head_MLP = dy.parameter(params["head_MLP"])
     head_MLP_bias = dy.parameter(params["head_MLP_bias"])
-
 
     R_bunsetsu_biaffine = dy.parameter(params["R_bunsetsu_biaffine"])
     slen_x = len(bembs)
@@ -317,15 +319,11 @@ def char_embds(char_seq, bipos_seq, word_ranges):
 
     ret = []
 
-    for wr in word_ranges:
+    for wr in word_ranges[1: -1]:
         start = wr[0]
         end = wr[1]
         if end < len(l2r_outs):
             ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start] - r2l_outs[end]]))
-        elif end - start <= 1:
-            ret.append(dy.concatenate([l2r_outs[-1], r2l_outs[-1]]))
-        else:
-            ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start], r2l_outs[start] - r2l_outs[-1]]))
     if tanh:
         ret = [dy.tanh(r) for r in ret]
     return ret
@@ -340,9 +338,11 @@ def word_embds(char_seq, bipos_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word
 
     wembs = []
 
-    for idx, wr in enumerate(word_ranges):
+    # for idx, wr in enumerate(word_ranges[1:-1]):
+    for idx, wr in enumerate(word_ranges[1: -1]):
         str = ""
         tmp_char = []
+        # idx += 1
 
         for c in char_seq[wr[0]: wr[1]]:
             str += cd.i2x[c]
@@ -379,8 +379,10 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
 
     ret = []
 
-    for br, aux_idx in zip(bunsetsu_ranges, aux_position):
-        start = br[0]
+    lp_func = params["lp_func"]
+
+    for br, aux_idx in zip(bunsetsu_ranges[1: -1], aux_position[1: -1]):
+        start = br[0] - 1
         end = br[1]
 
         if not cont_aux_separated:
@@ -410,18 +412,19 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
             if end < len(l2r_outs):
                 ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start],
                                            r2l_outs[start] - r2l_outs[end],
-                                           l2r_outs[end] - l2r_outs[start],
-                                           r2l_outs[start] - r2l_outs[end]]))
+                                           lp_func[0], lp_func[1]]))
+                                           # l2r_outs[end] - l2r_outs[start],
+                                           # r2l_outs[start] - r2l_outs[end]]))
             elif end - start <= 1:
                 ret.append(dy.concatenate([l2r_outs[-1],
                                            r2l_outs[-1],
-                                           r2l_outs[-1],
-                                           r2l_outs[-1]]))
+                                           lp_func[0], lp_func[1]]))
             else:
                 ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start],
                                            r2l_outs[start] - r2l_outs[-1],
-                                           l2r_outs[-1] - l2r_outs[start],
-                                           r2l_outs[start] - r2l_outs[-1]]))
+                                           lp_func[0], lp_func[1]]))
+                                           # l2r_outs[-1] - l2r_outs[start],
+                                           # r2l_outs[start] - r2l_outs[-1]]))
     if tanh:
         ret = [dy.tanh(r) for r in ret]
 
@@ -577,7 +580,13 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
                         cor_parsed_count[idx] = 0
                         done_sents.remove(idx)
 
+            # losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
+
+            arc_loss.value()
+
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
+
+            losses_arcs[0].value()
             global global_step
             if i % batch_size == 0 and i != 0:
 
@@ -645,22 +654,23 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
             print("loss chuncking: ", loss_bi_b.value())
         gold_bunsetsu_ranges = bunsetsu_range(bi_w_seq)
 
-        failed_chunk = []
-        for bidx, br in enumerate(gold_bunsetsu_ranges[1:]):
-            start = br[0]
-            end = br[1]
-            if end == len(gold_bunsetsu_ranges):
-                end = - 1
-            if np.sum(np.equal(bi_w_seq[start: end], preds_bi_b[start: end])) != len(bi_w_seq[start: end]):
-                failed_chunk.append(bidx)
+        if chunker:
+            failed_chunk = []
+            for bidx, br in enumerate(gold_bunsetsu_ranges[1:]):
+                start = br[0]
+                end = br[1]
+                if end == len(gold_bunsetsu_ranges[1:]):
+                    end = - 1
+                if np.sum(np.equal(bi_w_seq[start: end], preds_bi_b[start: end])) != len(bi_w_seq[start: end]):
+                    failed_chunk.append(bidx)
 
-        remains = [True] * len(gold_bunsetsu_ranges)
-        for fc in failed_chunk:
-            remains[fc]
-            dev_chunk_deps[i]
-            chunks_excluded += np.sum(np.equal(dev_chunk_deps[i], fc)) + remains[fc]
-            remains = [r * (1 - d) for r, d in zip(remains, np.equal(dev_chunk_deps[i], fc))]
-            remains[fc] = False
+            remains = [True] * len(gold_bunsetsu_ranges[1:])
+            for fc in failed_chunk:
+                remains[fc]
+                dev_chunk_deps[i]
+                chunks_excluded += np.sum(np.equal(dev_chunk_deps[i], fc)) + remains[fc]
+                remains = [r * (1 - d) for r, d in zip(remains, np.equal(dev_chunk_deps[i], fc))]
+                remains[fc] = False
 
         bembs = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges, word_pos_seq)
 
