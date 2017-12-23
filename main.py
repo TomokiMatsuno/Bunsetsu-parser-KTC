@@ -49,17 +49,17 @@ if JOS:
 if MINI_SET:
     files = [path2KTC + 'miniKTC_train.txt', path2KTC + 'miniKTC_dev.txt' ]
 
-save_file = 'Bunsetsu-parser-KTC' + \
-            '_LAYERS-character' + str(LAYERS_character) + \
-            '_LAYERS-word' + str(LAYERS_word) + \
-            '_LAYERS-bunsetsu' + str(LAYERS_bunsetsu) + \
-            '_word-HIDDEN-DIM' + str(word_HIDDEN_DIM) + \
-            '_bunsetsu-HIDDEN-DIM' + str(bunsetsu_HIDDEN_DIM) + \
-            '_MLP-HIDDEN-DIM' + str(MLP_HIDDEN_DIM) + \
-            '_INPUT-DIM' + str(INPUT_DIM) + \
-            '_batch-size' + str(batch_size) + \
+save_file = 'KTC' + \
+            '_LAYERS-c' + str(LAYERS_character) + \
+            '_LAYERS-w' + str(LAYERS_word) + \
+            '_LAYERS-b' + str(LAYERS_bunsetsu) + \
+            '_wHD' + str(word_HIDDEN_DIM) + \
+            '_bHD' + str(bunsetsu_HIDDEN_DIM) + \
+            '_MLP-HD' + str(MLP_HIDDEN_DIM) + \
+            '_INP-D' + str(INPUT_DIM) + \
+            '_batch' + str(batch_size) + \
             '_pdrop' + str(pdrop) + \
-            '_pdrop_bunsetsu' + str(pdrop_bunsetsu)
+            '_pdrop_b' + str(pdrop_bunsetsu)
             #'_learning-rate' + str(learning_rate) + \
 
 split_name = ""
@@ -72,6 +72,9 @@ elif MINI_SET:
     split_name = "_MINISET"
 
 save_file = save_file + split_name
+
+if cont_aux_separated:
+    save_file = save_file + "_cont_aux_separated"
 
 if scheduled_learning:
     save_file = save_file + "_scheduledLearning"
@@ -151,13 +154,16 @@ WIT_SIZE = len(witd.i2x) + 1
 
 pc = dy.ParameterCollection()
 
-trainer = dy.AdadeltaTrainer(pc)
+if not use_annealing:
+    trainer = dy.AdadeltaTrainer(pc)
+else:
+    trainer = dy.AdamTrainer(pc, config.learning_rate , config.beta_1, config.beta_2, config.epsilon)
 
 global_step = 0
 
 def update_parameters():
     if use_annealing:
-        trainer.learning_rate = learning_rate * decay ** (global_step / decay_steps)
+        trainer.learning_rate = config.learning_rate * decay ** (global_step / config.decay_steps)
     trainer.update()
 
 
@@ -397,8 +403,8 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
             #     ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start - 1], r2l_outs[start] - r2l_outs[-1]]))
         elif aux_idx != -1:
             ret.append(dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start + 1],
-                                       r2l_outs[start] - r2l_outs[start + aux_idx - 1],
-                                       l2r_outs[end] - l2r_outs[start + aux_idx + 1],
+                                       r2l_outs[start] - r2l_outs[start + aux_idx],
+                                       l2r_outs[end] - l2r_outs[start + aux_idx],
                                        r2l_outs[start + aux_idx] - r2l_outs[end - 1]]))
         else:
             ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start + 1],
@@ -505,12 +511,12 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
 
 
-    print(pdrop)
-    print(pdrop_bunsetsu)
-    print("done_sents", len(done_sents))
+    # print(pdrop)
+    # print(pdrop_bunsetsu)
+    # print("done_sents", len(done_sents))
 
     for it in range(train_iter):
-        print("iteration: ", it)
+        # print("iteration: ", it)
         num_tot_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep_not_argmax = 0
@@ -580,7 +586,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
 
             global global_step
-            if i % batch_size == 0 and i != 0:
+            if (i % batch_size == 0 or i == len(train_sents) - 1) and i != 0:
 
                 losses_arcs.extend(losses_bunsetsu)
 
@@ -596,9 +602,10 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
                 if show_acc:
                     print("dep accuracy: ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
                     print("dep accuracy not argmax: ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
-        print("time in this iter: ", time.time() - prev)
+        if show_time:
+            print("time in this iter: ", time.time() - prev)
         prev = time.time()
-        print("total loss in this iter: ", tot_loss_in_iter)
+        print(it, "\t[train] average loss:\t", tot_loss_in_iter / len(train_sents))
 
 
 def dev(char_seqs, bipos_seqs, bi_b_seqs):
@@ -617,8 +624,8 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
 
     prev = time.time()
 
-    print(pdrop)
-    print(pdrop_bunsetsu)
+    # print(pdrop)
+    # print(pdrop_bunsetsu)
     total_loss = 0
 
     for i in range(len(char_seqs)):
@@ -641,7 +648,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         loss_bi_b, preds_bi_b, num_cor_bi_b = bi_bunsetsu_wembs(wembs, bi_w_seq)
         num_tot_bi_b += len(wembs)
         num_tot_cor_bi_b += num_cor_bi_b
-        if i % show_acc_every == 0 and i != 0:
+        if i % show_acc_every == 0 and i != 0 and chunker:
             print("accuracy chunking: ", num_tot_cor_bi_b / num_tot_bi_b)
             print("loss chuncking: ", loss_bi_b.value())
         gold_bunsetsu_ranges = bunsetsu_range(bi_w_seq)
@@ -669,20 +676,20 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
 
         if i % show_acc_every == 0 and i != 0:
-            loss_bi_b_value = loss_bi_b.value()
-            print(i, " bi_b loss")
-            print(loss_bi_b_value)
             if chunker and num_tot_bi_b > 0:
                 print(i, " accuracy chunking ", num_tot_cor_bi_b / num_tot_bi_b)
-            if num_tot_bunsetsu_dep > 0:
-                print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
-                print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
-            print("time: ", time.time() - prev)
+            # if num_tot_bunsetsu_dep > 0:
+                # print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
+                # print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
+            if show_time:
+                print("time: ", time.time() - prev)
             prev = time.time()
         if len(wembs) == num_cor_bi_b:
             complete_chunking += 1
 
         arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs)
+
+        total_loss += dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, dev_chunk_deps[i])).value()
 
         num_tot_bunsetsu_dep += len(bembs) - 1
 
@@ -704,10 +711,11 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         best_acc = num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep
         update = True
         early_stop_count = 0
+    print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep, end='\t')
     if output_result:
         with open(result_file, mode='a', encoding='utf-8') as f:
-            f.write(str(i) + " accuracy dep " + str(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)+ '\n')
-            f.write("total arc loss: " + str(total_loss) + '\n')
+            f.write(str(i) + " accuracy dep " + str(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep) + '\n')
+            f.write("total arc loss: " + str(total_loss / len(dev_sents)) + '\n')
             if chunker:
                 f.write(str(i) + " accuracy chunking " + str(num_tot_cor_bi_b / num_tot_bi_b) + '\n')
                 f.write("complete chunking rate: " + str(complete_chunking / len(char_seqs))+ '\n')
@@ -715,7 +723,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
                 f.write("complete chunking: " + str(complete_chunking)+ '\n')
                 f.write("failed_chunking: " + str(failed_chunking)+ '\n')
 
-    print("total arc loss: " + str(total_loss))
+    print("[dev]average loss: " + str(total_loss / len(dev_sents)))
     if chunker:
         print("complete_chunking rate: " + str(complete_chunking / len(char_seqs)))
         print("failed_chunking rate: " + str(failed_chunking / len(char_seqs)))
@@ -773,13 +781,13 @@ for e in range(epoc):
         print("saved into: ", save_file)
 
     if early_stop_count > early_stop:
-        print("best_acc: ", best_acc)
+        print("best_acc: ", best_acc, end='\t')
         with open(result_file, mode='a', encoding='utf-8') as f:
             f.write("best_acc: " + str(best_acc))
 
         break
     else:
-        print("best_acc: ", best_acc)
+        print("best_acc: ", best_acc, end='\t')
         print("early_stop_count: ", early_stop_count)
         with open(result_file, mode='a', encoding='utf-8') as f:
             f.write("best_acc: " + str(best_acc) + '\n')
