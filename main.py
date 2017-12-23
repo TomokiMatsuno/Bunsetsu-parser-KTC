@@ -582,11 +582,9 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
             # losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
 
-            arc_loss.value()
 
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
 
-            losses_arcs[0].value()
             global global_step
             if i % batch_size == 0 and i != 0:
 
@@ -601,6 +599,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
                 tot_loss_in_iter += sum_losses_arcs_value
 
             if i % show_loss_every == 0 and i != 0:
+                print(i)
                 if show_acc:
                     print("dep accuracy: ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
                     print("dep accuracy not argmax: ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
