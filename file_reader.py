@@ -249,7 +249,7 @@ class DataFrameKtc(DataFrame):
             initial_entries = ["NULL", "UNK", "ROOT", "BOS", "EOS"]
         wd = Dict(doc_word_forms, initial_entries)
         cd = Dict(doc_char_forms, initial_entries)
-        bpd = Dict(doc_word_biposes, ["NULL", "B_ROOT", "BOS", "EOS"])
+        bpd = Dict(doc_word_biposes, ["NULL", "B_ROOT", "B_BOS", "B_EOS"])
         td = Dict(doc_pos, initial_entries)
         tsd = Dict(doc_pos_sub, initial_entries)
         wif = Dict(doc_word_inflection_forms, initial_entries)
@@ -295,7 +295,7 @@ class DataFrameKtc(DataFrame):
             if config.BOS_EOS:
                 # tmp_word.append(wd.x2i["BOS"])
                 tmp_char.append(cd.x2i["BOS"])
-                tmp_word_bipos.append(bpd.x2i["BOS"])
+                tmp_word_bipos.append(bpd.x2i["B_BOS"])
                 tmp_chunk_bi.append(0)
                 tmp_pos.append(td.x2i["BOS"])
                 tmp_bi.append(0)
@@ -306,7 +306,7 @@ class DataFrameKtc(DataFrame):
             if config.BOS_EOS:
                 tmp_word.append(wd.x2i["BOS"])
                 tmp_char.append(cd.x2i["BOS"])
-                tmp_word_bipos.append(bpd.x2i["BOS"])
+                tmp_word_bipos.append(bpd.x2i["B_BOS"])
                 tmp_chunk_bi.append(0)
                 tmp_pos.append(td.x2i["BOS"])
                 tmp_bi.append(0)
@@ -359,7 +359,7 @@ class DataFrameKtc(DataFrame):
             if config.BOS_EOS:
                 tmp_word.append(wd.x2i["EOS"])
                 tmp_char.append(cd.x2i["EOS"])
-                tmp_word_bipos.append(bpd.x2i["EOS"])
+                tmp_word_bipos.append(bpd.x2i["B_EOS"])
                 tmp_chunk_bi.append(0)
                 tmp_pos.append(td.x2i["EOS"])
                 tmp_bi.append(0)
@@ -370,7 +370,7 @@ class DataFrameKtc(DataFrame):
             if config.BOS_EOS:
                 # tmp_word.append(wd.x2i["EOS"])
                 tmp_char.append(cd.x2i["EOS"])
-                tmp_word_bipos.append(bpd.x2i["EOS"])
+                tmp_word_bipos.append(bpd.x2i["B_EOS"])
                 tmp_chunk_bi.append(0)
                 tmp_pos.append(td.x2i["EOS"])
                 tmp_bi.append(0)
