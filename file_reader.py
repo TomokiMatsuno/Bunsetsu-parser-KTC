@@ -1,6 +1,7 @@
 import codecs
 import re
-from config import use_wif_wit
+import config
+
 
 def make_line_chunks(lines, trigger, end_marker=None):
     lines_idx = 0
@@ -245,10 +246,10 @@ class DataFrameKtc(DataFrame):
             doc_pos.append(poss)
 
         if initial_entries is None:
-            initial_entries = ["NULL", "UNK", "ROOT", "SOS", "EOS"]
+            initial_entries = ["NULL", "UNK", "ROOT", "BOS", "EOS"]
         wd = Dict(doc_word_forms, initial_entries)
         cd = Dict(doc_char_forms, initial_entries)
-        bpd = Dict(doc_word_biposes, ["NULL", "B_ROOT", "SOS", "EOS"])
+        bpd = Dict(doc_word_biposes, ["NULL", "B_ROOT", "BOS", "EOS"])
         td = Dict(doc_pos, initial_entries)
         tsd = Dict(doc_pos_sub, initial_entries)
         wif = Dict(doc_word_inflection_forms, initial_entries)
@@ -291,6 +292,29 @@ class DataFrameKtc(DataFrame):
             tmp_wif = []
             tmp_wit = []
 
+            if config.BOS_EOS:
+                # tmp_word.append(wd.x2i["BOS"])
+                tmp_char.append(cd.x2i["BOS"])
+                tmp_word_bipos.append(bpd.x2i["BOS"])
+                tmp_chunk_bi.append(0)
+                tmp_pos.append(td.x2i["BOS"])
+                tmp_bi.append(0)
+                tmp_pos_sub.append(tsd.x2i["BOS"])
+                tmp_wif.append(wifd.x2i["BOS"])
+                tmp_wit.append(witd.x2i["BOS"])
+
+            if config.BOS_EOS:
+                tmp_word.append(wd.x2i["BOS"])
+                tmp_char.append(cd.x2i["BOS"])
+                tmp_word_bipos.append(bpd.x2i["BOS"])
+                tmp_chunk_bi.append(0)
+                tmp_pos.append(td.x2i["BOS"])
+                tmp_bi.append(0)
+                tmp_pos_sub.append(tsd.x2i["BOS"])
+                tmp_wif.append(wifd.x2i["BOS"])
+                tmp_wit.append(witd.x2i["BOS"])
+
+
             tmp_word.append(wd.x2i["ROOT"])
             tmp_char.append(cd.x2i["ROOT"])
             tmp_word_bipos.append(bpd.x2i["B_ROOT"])
@@ -331,6 +355,28 @@ class DataFrameKtc(DataFrame):
             pos_sub_seqs.append(tmp_pos_sub)
             word_inflection_form_seqs.append(tmp_wif)
             word_inflection_types_seqs.append(tmp_wit)
+
+            if config.BOS_EOS:
+                tmp_word.append(wd.x2i["EOS"])
+                tmp_char.append(cd.x2i["EOS"])
+                tmp_word_bipos.append(bpd.x2i["EOS"])
+                tmp_chunk_bi.append(0)
+                tmp_pos.append(td.x2i["EOS"])
+                tmp_bi.append(0)
+                tmp_pos_sub.append(tsd.x2i["EOS"])
+                tmp_wif.append(wifd.x2i["EOS"])
+                tmp_wit.append(witd.x2i["EOS"])
+
+            if config.BOS_EOS:
+                # tmp_word.append(wd.x2i["EOS"])
+                tmp_char.append(cd.x2i["EOS"])
+                tmp_word_bipos.append(bpd.x2i["EOS"])
+                tmp_chunk_bi.append(0)
+                tmp_pos.append(td.x2i["EOS"])
+                tmp_bi.append(0)
+                tmp_pos_sub.append(tsd.x2i["EOS"])
+                tmp_wif.append(wifd.x2i["EOS"])
+                tmp_wit.append(witd.x2i["EOS"])
 
         return word_seqs, char_seqs, word_bipos_seqs, \
                chunk_bi_seqs, chunk_deps, pos_seqs, bi_seqs, \
