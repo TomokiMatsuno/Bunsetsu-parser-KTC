@@ -26,6 +26,7 @@ if CABOCHA_SPLIT:
     files = glob.glob(path2KTC + 'syn/95010[1-9].*')
     train_dev_boundary = -1
 best_acc = 0.0
+least_loss = 1000.0
 update = False
 early_stop_count = 0
 
@@ -125,7 +126,6 @@ for sent in dev_sents:
         witd.add_entry(wit)
 
 
-
 train_word_seqs, train_char_seqs, train_word_bipos_seqs, \
 train_chunk_bi_seqs, train_chunk_deps, train_pos_seqs, train_word_bi_seqs, \
 train_pos_sub_seqs, train_wif_seqs, train_wit_seqs \
@@ -196,6 +196,27 @@ params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, INPUT_DIM))
 params["lp_wif"] = pc.add_lookup_parameters((WIF_SIZE + 1, INPUT_DIM))
 params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, INPUT_DIM))
 
+
+params["cemb_gain"] = pc.add_parameters((INPUT_DIM * 1))
+params["cemb_bias"] = pc.add_parameters((INPUT_DIM * 1))
+
+params["wemb_gain"] = pc.add_parameters((INPUT_DIM * 4))
+params["wemb_bias"] = pc.add_parameters((INPUT_DIM * 4))
+
+params["bemb_gain"] = pc.add_parameters((word_HIDDEN_DIM * 2 * (1 + cont_aux_separated)))
+params["bemb_bias"] = pc.add_parameters((word_HIDDEN_DIM * 2 * (1 + cont_aux_separated)))
+
+params["bemb_dep_gain"] = pc.add_parameters((MLP_HIDDEN_DIM))
+params["bemb_dep_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
+
+params["bemb_head_gain"] = pc.add_parameters((MLP_HIDDEN_DIM))
+params["bemb_head_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
+
+params["bemb_gain"] = pc.add_parameters((word_HIDDEN_DIM * 2 * (1 + cont_aux_separated)))
+params["bemb_bias"] = pc.add_parameters((word_HIDDEN_DIM * 2 * (1 + cont_aux_separated)))
+
+
+
 params["lp_func"] = pc.add_lookup_parameters((2, word_HIDDEN_DIM))
 
 params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 2))
@@ -261,12 +282,33 @@ def dep_bunsetsu(bembs):
     R_bunsetsu_biaffine = dy.parameter(params["R_bunsetsu_biaffine"])
     slen_x = len(bembs)
     slen_y = slen_x
+
+
     bembs_dep = dy.dropout(dy.concatenate(bembs, 1), pdrop_bunsetsu)
     bembs_head = dy.dropout(dy.concatenate(bembs, 1), pdrop_bunsetsu)
+
+
+    # bembs_head = dy.layer_norm(bembs_head, gain_head, bias_head)
+
     input_size = MLP_HIDDEN_DIM
 
     bembs_dep = leaky_relu(dep_MLP * bembs_dep + dep_MLP_bias)
     bembs_head = leaky_relu(head_MLP * bembs_head + head_MLP_bias)
+
+    # bembs_dep = dep_MLP * bembs_dep + dep_MLP_bias
+    # bembs_head = head_MLP * bembs_head + head_MLP_bias
+    #
+    # gain_dep = dy.parameter(params["bemb_dep_gain"])
+    # bias_dep = dy.parameter(params["bemb_dep_bias"])
+    #
+    # gain_head = dy.parameter(params["bemb_head_gain"])
+    # bias_head = dy.parameter(params["bemb_head_bias"])
+    #
+    #
+    # bembs_dep = leaky_relu(dy.layer_norm(bembs_dep, gain_dep, bias_dep))
+    # bembs_head = leaky_relu(dy.layer_norm(bembs_head, gain_head, bias_head))
+
+
 
     blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_head, input_size, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
 
@@ -321,6 +363,12 @@ def char_embds(char_seq, bipos_seq, word_ranges):
 
     cembs = [lp_c[char_seq[i]] for i in range(len(char_seq))]
 
+    if layer_norm and False:
+        gain = dy.parameter(params["cemb_gain"])
+        bias = dy.parameter(params["cemb_bias"])
+
+        cembs = [dy.layer_norm(cemb, gain, bias) for cemb in cembs]
+
     bidir, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop)
 
     ret = []
@@ -332,6 +380,7 @@ def char_embds(char_seq, bipos_seq, word_ranges):
             ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start + 1], r2l_outs[start] - r2l_outs[end - 1]]))
     if tanh:
         ret = [dy.tanh(r) for r in ret]
+        # ret = [dy.layer_norm(r, gain, bias) for r in ret]
     return ret
 
 
@@ -378,6 +427,20 @@ def word_embds(char_seq, bipos_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word
 
         wembs.append(dy.concatenate([word_form, pos_lp, cembs[idx]]))
 
+    if tanh:
+        wembs = [dy.tanh(wemb) for wemb in wembs]
+        # gain = dy.parameter(params["char_gain"])
+        # bias = dy.parameter(params["char_bias"])
+        #
+        # wembs = [dy.layer_norm(r, gain, bias) for r in wembs]
+
+    if layer_norm and False:
+        gain = dy.parameter(params["wemb_gain"])
+        bias = dy.parameter(params["wemb_bias"])
+
+        wembs = [dy.layer_norm(wemb, gain, bias) for wemb in wembs]
+
+
     return wembs
 
 
@@ -422,8 +485,16 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
             #                                lp_func[0], lp_func[1]]))
                                            # l2r_outs[-1] - l2r_outs[start],
                                            # r2l_outs[start] - r2l_outs[-1]]))
+
+    if layer_norm:
+        gain = dy.parameter(params["bemb_gain"])
+        bias = dy.parameter(params["bemb_bias"])
+
+        ret = [dy.layer_norm(bemb, gain, bias) for bemb in ret]
+
     if tanh:
         ret = [dy.tanh(r) for r in ret]
+
 
     return ret
 
@@ -522,7 +593,7 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
         num_tot_cor_bunsetsu_dep_not_argmax = 0
         tot_loss_in_iter = 0
 
-        for i in (range(len(char_seqs))):
+        for i in (range(len(char_seqs) // config.divide_train)):
             if i % batch_size == 0:
                 losses_bunsetsu = []
                 losses_arcs = []
@@ -707,10 +778,19 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
     global best_acc
     global update
     global early_stop_count
+    global least_loss
+
     if best_acc < num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep:
         best_acc = num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep
         update = True
         early_stop_count = 0
+
+    if least_loss > (total_loss / len(dev_sents)):
+        least_loss = total_loss / len(dev_sents)
+        update = True
+        early_stop_count = 0
+
+
     print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep, end='\t')
     if output_result:
         with open(result_file, mode='a', encoding='utf-8') as f:
@@ -745,6 +825,7 @@ for e in range(epoc):
 
     if e * train_iter >= change_train_iter and train_iter != 1:
         train_iter = 1
+        config.divide_train = 1
 
     print("epoc: ", prev_epoc)
     prev_epoc += train_iter
@@ -788,6 +869,8 @@ for e in range(epoc):
         break
     else:
         print("best_acc: ", best_acc, end='\t')
+        print("least_loss: ", least_loss, end='\t')
+        print("lr: ", trainer.learning_rate, end='\t')
         print("early_stop_count: ", early_stop_count)
         with open(result_file, mode='a', encoding='utf-8') as f:
             f.write("best_acc: " + str(best_acc) + '\n')
