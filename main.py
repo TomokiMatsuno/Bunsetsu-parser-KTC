@@ -374,13 +374,12 @@ def char_embds(char_seq, bipos_seq, word_ranges):
     ret = []
 
     for wr in word_ranges[1: -1]:
-        start = wr[0]
-        end = wr[1]
-        if end < len(l2r_outs) or True:
-            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start + 1], r2l_outs[start] - r2l_outs[end - 1]]))
+        start = wr[0] - 1
+        end = wr[1] - 1
+        ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start], r2l_outs[start + 1] - r2l_outs[end + 1]]))
+
     if tanh:
         ret = [dy.tanh(r) for r in ret]
-        # ret = [dy.layer_norm(r, gain, bias) for r in ret]
     return ret
 
 
@@ -451,13 +450,13 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
     lp_func = params["lp_func"]
 
     for br, aux_idx in zip(bunsetsu_ranges[2: -2], aux_position[2: -2]):
-        start = br[0] - 1
+        start = br[0] - 2
         # start = br[0]
-        end = br[1] - 1
+        end = br[1] - 2
 
         if not cont_aux_separated:
-            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start + 1],
-                                       r2l_outs[start] - r2l_outs[end - 1]]))
+            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start],
+                                       r2l_outs[start + 1] - r2l_outs[end + 1]]))
             # if end + 1 < len(l2r_outs):
             #     ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start - 1], r2l_outs[start] - r2l_outs[end + 1]]))
             # elif end - start <= 1:
@@ -465,13 +464,13 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
             # else:
             #     ret.append(dy.concatenate([l2r_outs[-1] - l2r_outs[start - 1], r2l_outs[start] - r2l_outs[-1]]))
         elif aux_idx != -1:
-            ret.append(dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start + 1],
-                                       r2l_outs[start] - r2l_outs[start + aux_idx],
+            ret.append(dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start],
+                                       r2l_outs[start + 1] - r2l_outs[start + aux_idx + 1],
                                        l2r_outs[end] - l2r_outs[start + aux_idx],
-                                       r2l_outs[start + aux_idx] - r2l_outs[end - 1]]))
+                                       r2l_outs[start + aux_idx + 1] - r2l_outs[end + 1]]))
         else:
-            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start + 1],
-                                       r2l_outs[start] - r2l_outs[end - 1],
+            ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start],
+                                       r2l_outs[start + 1] - r2l_outs[end + 1],
                                        lp_func[0], lp_func[1]]))
                                        # l2r_outs[end] - l2r_outs[start],
                                        # r2l_outs[start] - r2l_outs[end]]))
