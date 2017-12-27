@@ -625,8 +625,9 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
             wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
-            loss_bi_bunsetsu, bi_bunsetsu_preds, _ = bi_bunsetsu_wembs(wembs, bi_w_seq)
-            losses_bunsetsu.append(loss_bi_bunsetsu)
+            if chunker:
+                loss_bi_bunsetsu, bi_bunsetsu_preds, _ = bi_bunsetsu_wembs(wembs, bi_w_seq)
+                losses_bunsetsu.append(loss_bi_bunsetsu)
 
             bunsetsu_ranges = bunsetsu_range(bi_w_seq)
             aux_positions = aux_position(bunsetsu_ranges, word_pos_seqs)
@@ -718,7 +719,8 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
                            dev_pos_sub_seqs[i], dev_wif_seqs[i], dev_wit_seqs[i], word_ranges)
         wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
-        loss_bi_b, preds_bi_b, num_cor_bi_b = bi_bunsetsu_wembs(wembs, bi_w_seq)
+        if chunker:
+            loss_bi_b, preds_bi_b, num_cor_bi_b = bi_bunsetsu_wembs(wembs, bi_w_seq)
         num_tot_bi_b += len(wembs)
         num_tot_cor_bi_b += num_cor_bi_b
         if i % show_acc_every == 0 and i != 0 and chunker:
