@@ -48,7 +48,7 @@ if JOS:
     files = [path2KTC + 'just-one-sentence.txt', path2KTC + 'just-one-sentence.txt']
 
 if MINI_SET:
-    files = [path2KTC + 'miniKTC_train.txt', path2KTC + 'miniKTC_dev.txt' ]
+    files = [path2KTC + 'miniKTC_train.txt', path2KTC + 'miniKTC_dev.txt']
 
 save_file = 'KTC' + \
             '_LAYERS-c' + str(LAYERS_character) + \
@@ -83,9 +83,24 @@ if scheduled_learning:
 if use_annealing:
     save_file = save_file + "_use-annealing"
 
+if only_cont:
+    save_file = save_file + "_onlycont"
+
+if only_func:
+    save_file = save_file + "_onlyfunc"
+
+if use_cembs:
+    save_file = save_file + "_cembs"
+
+if wemb_lstm:
+    save_file = save_file + "_wemblstm"
+
+
 load_file = save_file
 
 result_file = save_file + "_result.txt"
+
+
 
 
 print(files)
@@ -189,17 +204,19 @@ else:
     l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
     r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
 
-    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
-    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
-    if not cont_aux_separated:
-        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-    else:
-        l2rlstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * (2 * (use_cembs + 1)), word_HIDDEN_DIM, pc)
+    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * (2 * (use_cembs + 1)), word_HIDDEN_DIM, pc)
+    # if not cont_aux_separated:
+        # l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+        # r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, bunsetsu_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, bunsetsu_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+    # else:
+    l2rlstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+    r2llstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
 
-        l2rlstm_func = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_func = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+    l2rlstm_func = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+    r2llstm_func = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
 
 
 params = {}
@@ -233,6 +250,7 @@ params["bemb_bias"] = pc.add_parameters((word_HIDDEN_DIM * 2 * (1 + cont_aux_sep
 
 
 params["lp_func"] = pc.add_lookup_parameters((2, word_HIDDEN_DIM))
+params["lp_cont"] = pc.add_lookup_parameters((2, word_HIDDEN_DIM))
 
 params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 2))
 params["bias_bi_b"] = pc.add_parameters((2))
@@ -294,7 +312,7 @@ def bi_bunsetsu_wembs(wembs, bi_w_seq):
     return loss, preds, num_cor
 
 
-def dep_bunsetsu(bembs):
+def dep_bunsetsu(bembs, pdrop):
     # dep_MLP = dy.dropout(dy.parameter(params["dep_MLP"]), pdrop_bunsetsu)
     # dep_MLP_bias = dy.dropout(dy.parameter(params["dep_MLP_bias"]), pdrop_bunsetsu)
     # head_MLP = dy.dropout(dy.parameter(params["head_MLP"]), pdrop_bunsetsu)
@@ -312,8 +330,8 @@ def dep_bunsetsu(bembs):
     slen_y = slen_x
 
 
-    bembs_dep = dy.dropout(dy.concatenate(bembs, 1), pdrop_bunsetsu)
-    bembs_head = dy.dropout(dy.concatenate(bembs, 1), pdrop_bunsetsu)
+    bembs_dep = dy.dropout(dy.concatenate(bembs, 1), pdrop)
+    bembs_head = dy.dropout(dy.concatenate(bembs, 1), pdrop)
 
     # bembs_dep = dy.concatenate(bembs, 1)
     # bembs_head = dy.concatenate(bembs, 1)
@@ -325,8 +343,8 @@ def dep_bunsetsu(bembs):
     # bembs_dep = leaky_relu(dep_MLP * bembs_dep + dep_MLP_bias)
     # bembs_head = leaky_relu(head_MLP * bembs_head + head_MLP_bias)
 
-    bembs_dep = dy.dropout(leaky_relu(dep_MLP * bembs_dep + dep_MLP_bias), pdrop_bunsetsu)
-    bembs_head = dy.dropout(leaky_relu(head_MLP * bembs_head + head_MLP_bias), pdrop_bunsetsu)
+    bembs_dep = dy.dropout(leaky_relu(dep_MLP * bembs_dep + dep_MLP_bias), pdrop)
+    bembs_head = dy.dropout(leaky_relu(head_MLP * bembs_head + head_MLP_bias), pdrop)
 
     # bembs_dep = dep_MLP * bembs_dep + dep_MLP_bias
     # bembs_head = head_MLP * bembs_head + head_MLP_bias
@@ -454,8 +472,10 @@ def word_embds(char_seq, bipos_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word
             pos_lp = word_form
         if rnd_word == 0:
             word_form = pos_lp
-
-        wembs.append(dy.concatenate([word_form, pos_lp, cembs[idx]]))
+        if use_cembs:
+            wembs.append(dy.concatenate([word_form, pos_lp, cembs[idx]]))
+        else:
+            wembs.append(dy.concatenate([word_form, pos_lp]))
 
     if tanh:
         wembs = [dy.tanh(wemb) for wemb in wembs]
@@ -474,11 +494,12 @@ def word_embds(char_seq, bipos_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word
     return wembs
 
 
-def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
+def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position, pdrop):
 
     ret = []
 
     lp_func = params["lp_func"]
+    lp_cont = params["lp_cont"]
 
     cont_MLP_bias = dy.parameter(params["cont_MLP_bias"])
     cont_MLP = dy.parameter(params["cont_MLP"])
@@ -499,8 +520,8 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
 
 
         if not cont_aux_separated:
-            ret.append(dy.concatenate([leaky_relu(l2r_outs[end] - l2r_outs[start]),
-                                       leaky_relu(r2l_outs[start + 1] - r2l_outs[end + 1])]))
+            ret.append(dy.concatenate([dy.dropout(leaky_relu(l2r_outs[end] - l2r_outs[start]), pdrop),
+                                       dy.dropout(leaky_relu(r2l_outs[start + 1] - r2l_outs[end + 1]), pdrop)]))
             # if end + 1 < len(l2r_outs):
             #     ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start - 1], r2l_outs[start] - r2l_outs[end + 1]]))
             # elif end - start <= 1:
@@ -512,19 +533,36 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
             #                 r2l_outs[start + 1] - r2l_outs[start + aux_idx + 1]]))
             # func_embd = leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([l2r_outs[end] - l2r_outs[start + aux_idx],
             #                            r2l_outs[start + aux_idx + 1] - r2l_outs[end + 1]]))
+            if wemb_lstm:
+                cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start],
+                                r2l_outs[start + 1] - r2l_outs[start + aux_idx + 1]])), pdrop)
+                func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([l2r_outs[end] - l2r_outs[start + aux_idx],
+                                           r2l_outs[start + aux_idx + 1] - r2l_outs[end + 1]])), pdrop)
+            else:
+                if aux_idx == 0:
+                    cont_embd = dy.dropout(leaky_relu(
+                        cont_MLP_bias + cont_MLP * dy.concatenate([lp_cont[0],
+                                                                   lp_cont[1]])), pdrop)
+                else:
+                    cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([dy.average(l2r_outs[start: start + aux_idx]),
+                                dy.average(r2l_outs[start: start + aux_idx])])), pdrop)
 
-            cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start],
-                            r2l_outs[start + 1] - r2l_outs[start + aux_idx + 1]])), pdrop)
-            func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([l2r_outs[end] - l2r_outs[start + aux_idx],
-                                       r2l_outs[start + aux_idx + 1] - r2l_outs[end + 1]])), pdrop)
+                func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([dy.average(l2r_outs[start + aux_idx: end]),
+                                           dy.average(r2l_outs[start + aux_idx: end])])), pdrop)
 
             # cont_embd = dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start],
             #                 r2l_outs[start + 1] - r2l_outs[start + aux_idx + 1]])
             # func_embd = dy.concatenate([l2r_outs[end] - l2r_outs[start + aux_idx],
             #                            r2l_outs[start + aux_idx + 1] - r2l_outs[end + 1]])
             # ret.append(dy.dropout(dy.concatenate([cont_embd, func_embd]), pdrop))
-            ret.append(dy.concatenate([cont_embd, func_embd]))
 
+            if only_cont:
+                func_embd = cont_embd
+            elif only_func:
+                cont_embd = func_embd
+
+
+            ret.append(dy.concatenate([cont_embd, func_embd]))
 
             cont_seq.append(cont_embd)
             func_seq.append(func_embd)
@@ -537,14 +575,23 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position):
             # cont_embd = leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([l2r_outs[end] - l2r_outs[start],
             #                 r2l_outs[start + 1] - r2l_outs[end + 1]]))
             # func_embd = leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([lp_func[0], lp_func[1]]))
-
-            cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([l2r_outs[end] - l2r_outs[start],
-                            r2l_outs[start + 1] - r2l_outs[end + 1]])), pdrop)
-            func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([lp_func[0], lp_func[1]])), pdrop)
+            if wemb_lstm:
+                cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([l2r_outs[end] - l2r_outs[start],
+                                r2l_outs[start + 1] - r2l_outs[end + 1]])), pdrop)
+                func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([lp_func[0], lp_func[1]])), pdrop)
+            else:
+                cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([dy.average(l2r_outs[start: end]),
+                                dy.average(r2l_outs[start: end])])), pdrop)
+                func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([lp_func[0], lp_func[1]])), pdrop)
 
             # cont_embd = dy.concatenate([l2r_outs[end] - l2r_outs[start],
             #                 r2l_outs[start + 1] - r2l_outs[end + 1]])
             # func_embd = dy.concatenate([lp_func[0], lp_func[1]])
+
+            if only_cont:
+                func_embd = cont_embd
+            elif only_func:
+                cont_embd = func_embd
 
             # ret.append(dy.dropout(dy.concatenate([cont_embd, func_embd]), pdrop))
             ret.append(dy.concatenate([cont_embd, func_embd]))
@@ -686,8 +733,8 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
 
             wembs = word_embds(char_seqs[idx], train_word_bipos_seqs[idx], train_pos_seqs[idx],
                                train_pos_sub_seqs[idx], train_wif_seqs[idx], train_wit_seqs[idx], word_ranges)
-
-            wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
+            if wemb_lstm:
+                wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
             if chunker:
                 loss_bi_bunsetsu, bi_bunsetsu_preds, _ = bi_bunsetsu_wembs(wembs, bi_w_seq)
@@ -696,12 +743,15 @@ def train(char_seqs, bipos_seqs, bi_b_seqs):
             bunsetsu_ranges = bunsetsu_range(bi_w_seq)
             aux_positions = aux_position(bunsetsu_ranges, word_pos_seqs)
 
-            bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_positions)
+            if wemb_lstm:
+                bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_positions, pdrop_bunsetsu)
+            else:
+                bembs = bunsetsu_embds(wembs, wembs, bunsetsu_ranges, aux_positions, pdrop_bunsetsu)
 
             if bemb_lstm:
                 bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
 
-            arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs)
+            arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs, pdrop_bunsetsu)
 
             if scheduled_learning or show_acc:
                 num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, train_chunk_deps[idx]))
@@ -782,7 +832,8 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
 
         wembs = word_embds(char_seqs[i], dev_word_bipos_seqs[i], dev_pos_seqs[i],
                            dev_pos_sub_seqs[i], dev_wif_seqs[i], dev_wit_seqs[i], word_ranges)
-        wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
+        if wemb_lstm:
+            wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
         if chunker:
             loss_bi_b, preds_bi_b, num_cor_bi_b = bi_bunsetsu_wembs(wembs, bi_w_seq)
@@ -811,7 +862,11 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
                 remains = [r * (1 - d) for r, d in zip(remains, np.equal(dev_chunk_deps[i], fc))]
                 remains[fc] = False
         aux_positions = aux_position(gold_bunsetsu_ranges, word_pos_seq)
-        bembs = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges, aux_positions)
+
+        if wemb_lstm:
+            bembs = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges, aux_positions, pdrop_bunsetsu)
+        else:
+            bembs = bunsetsu_embds(wembs, wembs, gold_bunsetsu_ranges, aux_positions, pdrop_bunsetsu)
 
         if bemb_lstm:
             bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_bunsetsu)
@@ -828,7 +883,7 @@ def dev(char_seqs, bipos_seqs, bi_b_seqs):
         if chunker and len(wembs) == num_cor_bi_b:
             complete_chunking += 1
 
-        arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs)
+        arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs, pdrop_bunsetsu)
 
         total_loss += dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, dev_chunk_deps[i])).value()
 
