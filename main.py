@@ -95,7 +95,11 @@ if use_cembs:
 if wemb_lstm:
     save_file = save_file + "_wemblstm"
 
+if slide_window:
+    save_file = save_file + "_slide"
 
+if layer_norm:
+    save_file = save_file + "_layernorm"
 load_file = save_file
 
 result_file = save_file + "_result.txt"
@@ -186,20 +190,22 @@ def update_parameters():
 
 
 if not orthonormal:
-    l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
-    r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
+    l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc, layer_norm)
+    r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc, layer_norm)
 
-    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
-    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 4, word_HIDDEN_DIM, pc)
+    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * (2 * (use_cembs + 1)), word_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * (2 * (use_cembs + 1)), word_HIDDEN_DIM, pc, layer_norm)
+    # if not cont_aux_separated:
+        # l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+        # r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+    l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, bunsetsu_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, bunsetsu_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc, layer_norm)
+    # else:
+    l2rlstm_cont = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_cont = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
 
-    l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-
-    l2rlstm_cont = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), word_HIDDEN_DIM, pc)
-    r2llstm_cont = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), word_HIDDEN_DIM, pc)
-
-    l2rlstm_func = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), word_HIDDEN_DIM, pc)
-    r2llstm_func = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), word_HIDDEN_DIM, pc)
+    l2rlstm_func = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_func = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
 else:
     l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
     r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
@@ -209,8 +215,8 @@ else:
     # if not cont_aux_separated:
         # l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
         # r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, bunsetsu_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, bunsetsu_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, bunsetsu_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
+    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, bunsetsu_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
     # else:
     l2rlstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
     r2llstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 1 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
@@ -227,27 +233,6 @@ params["lp_p"] = pc.add_lookup_parameters((POS_SIZE + 1, INPUT_DIM))
 params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, INPUT_DIM))
 params["lp_wif"] = pc.add_lookup_parameters((WIF_SIZE + 1, INPUT_DIM))
 params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, INPUT_DIM))
-
-
-params["cemb_gain"] = pc.add_parameters((INPUT_DIM * 1))
-params["cemb_bias"] = pc.add_parameters((INPUT_DIM * 1))
-
-params["wemb_gain"] = pc.add_parameters((INPUT_DIM * 4))
-params["wemb_bias"] = pc.add_parameters((INPUT_DIM * 4))
-
-params["bemb_gain"] = pc.add_parameters((word_HIDDEN_DIM * 2 * (1 + cont_aux_separated)))
-params["bemb_bias"] = pc.add_parameters((word_HIDDEN_DIM * 2 * (1 + cont_aux_separated)))
-
-params["bemb_dep_gain"] = pc.add_parameters((MLP_HIDDEN_DIM))
-params["bemb_dep_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
-
-params["bemb_head_gain"] = pc.add_parameters((MLP_HIDDEN_DIM))
-params["bemb_head_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
-
-params["bemb_gain"] = pc.add_parameters((word_HIDDEN_DIM * 2 * (1 + cont_aux_separated)))
-params["bemb_bias"] = pc.add_parameters((word_HIDDEN_DIM * 2 * (1 + cont_aux_separated)))
-
-
 
 params["lp_func"] = pc.add_lookup_parameters((2, word_HIDDEN_DIM))
 params["lp_cont"] = pc.add_lookup_parameters((2, word_HIDDEN_DIM))
@@ -333,10 +318,6 @@ def dep_bunsetsu(bembs, pdrop):
     bembs_dep = dy.dropout(dy.concatenate(bembs, 1), pdrop)
     bembs_head = dy.dropout(dy.concatenate(bembs, 1), pdrop)
 
-    # bembs_dep = dy.concatenate(bembs, 1)
-    # bembs_head = dy.concatenate(bembs, 1)
-
-    # bembs_head = dy.layer_norm(bembs_head, gain_head, bias_head)
 
     input_size = MLP_HIDDEN_DIM
 
@@ -349,15 +330,6 @@ def dep_bunsetsu(bembs, pdrop):
     # bembs_dep = dep_MLP * bembs_dep + dep_MLP_bias
     # bembs_head = head_MLP * bembs_head + head_MLP_bias
     #
-    # gain_dep = dy.parameter(params["bemb_dep_gain"])
-    # bias_dep = dy.parameter(params["bemb_dep_bias"])
-    #
-    # gain_head = dy.parameter(params["bemb_head_gain"])
-    # bias_head = dy.parameter(params["bemb_head_bias"])
-    #
-    #
-    # bembs_dep = leaky_relu(dy.layer_norm(bembs_dep, gain_dep, bias_dep))
-    # bembs_head = leaky_relu(dy.layer_norm(bembs_head, gain_head, bias_head))
 
     blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_head, input_size, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
 
@@ -411,12 +383,6 @@ def char_embds(char_seq, bipos_seq, word_ranges):
     lp_c = params["lp_c"]
 
     cembs = [lp_c[char_seq[i]] for i in range(len(char_seq))]
-
-    if layer_norm and False:
-        gain = dy.parameter(params["cemb_gain"])
-        bias = dy.parameter(params["cemb_bias"])
-
-        cembs = [dy.layer_norm(cemb, gain, bias) for cemb in cembs]
 
     bidir, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop)
 
@@ -479,17 +445,6 @@ def word_embds(char_seq, bipos_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word
 
     if tanh:
         wembs = [dy.tanh(wemb) for wemb in wembs]
-        # gain = dy.parameter(params["char_gain"])
-        # bias = dy.parameter(params["char_bias"])
-        #
-        # wembs = [dy.layer_norm(r, gain, bias) for r in wembs]
-
-    if layer_norm and False:
-        gain = dy.parameter(params["wemb_gain"])
-        bias = dy.parameter(params["wemb_bias"])
-
-        wembs = [dy.layer_norm(wemb, gain, bias) for wemb in wembs]
-
 
     return wembs
 
@@ -520,8 +475,13 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position, pdrop):
 
 
         if not cont_aux_separated:
+            # ret.append(dy.concatenate([dy.dropout(leaky_relu(l2r_outs[end] - l2r_outs[start]), pdrop),
+            #                            dy.dropout(leaky_relu(r2l_outs[start + 1] - r2l_outs[end + 1]), pdrop)]))
             ret.append(dy.concatenate([dy.dropout(leaky_relu(l2r_outs[end] - l2r_outs[start]), pdrop),
-                                       dy.dropout(leaky_relu(r2l_outs[start + 1] - r2l_outs[end + 1]), pdrop)]))
+                                       dy.dropout(leaky_relu(r2l_outs[start + 1] - r2l_outs[end + 1]), pdrop),
+                                       dy.dropout(leaky_relu(l2r_outs[end] - l2r_outs[start]), pdrop),
+                                       dy.dropout(leaky_relu(r2l_outs[start + 1] - r2l_outs[end + 1]), pdrop)
+                                       ]))
             # if end + 1 < len(l2r_outs):
             #     ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start - 1], r2l_outs[start] - r2l_outs[end + 1]]))
             # elif end - start <= 1:
@@ -534,21 +494,21 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position, pdrop):
             # func_embd = leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([l2r_outs[end] - l2r_outs[start + aux_idx],
             #                            r2l_outs[start + aux_idx + 1] - r2l_outs[end + 1]]))
             if wemb_lstm:
-                cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start],
-                                r2l_outs[start + 1] - r2l_outs[start + aux_idx + 1]])), pdrop)
-                func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([l2r_outs[end] - l2r_outs[start + aux_idx],
-                                           r2l_outs[start + aux_idx + 1] - r2l_outs[end + 1]])), pdrop)
+                cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([l2r_outs[start + aux_idx + slide_window] - l2r_outs[start + slide_window],
+                                r2l_outs[start + (1 - slide_window)] - r2l_outs[start + aux_idx + (1 - slide_window)]])), pdrop)
+                func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([l2r_outs[end + slide_window] - l2r_outs[start + aux_idx + slide_window],
+                                           r2l_outs[start + aux_idx + (1 - slide_window)] - r2l_outs[end + (1 - slide_window)]])), pdrop)
             else:
                 if aux_idx == 0:
                     cont_embd = dy.dropout(leaky_relu(
                         cont_MLP_bias + cont_MLP * dy.concatenate([lp_cont[0],
                                                                    lp_cont[1]])), pdrop)
                 else:
-                    cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([dy.average(l2r_outs[start: start + aux_idx]),
-                                dy.average(r2l_outs[start: start + aux_idx])])), pdrop)
+                    cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([dy.average(l2r_outs[start + 1: start + aux_idx + 1]),
+                                dy.average(r2l_outs[start + 1: start + aux_idx + 1])])), pdrop)
 
-                func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([dy.average(l2r_outs[start + aux_idx: end]),
-                                           dy.average(r2l_outs[start + aux_idx: end])])), pdrop)
+                func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([dy.average(l2r_outs[start + aux_idx + 1: end + 1]),
+                                           dy.average(r2l_outs[start + aux_idx + 1: end + 1])])), pdrop)
 
             # cont_embd = dy.concatenate([l2r_outs[start + aux_idx] - l2r_outs[start],
             #                 r2l_outs[start + 1] - r2l_outs[start + aux_idx + 1]])
@@ -576,13 +536,19 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position, pdrop):
             #                 r2l_outs[start + 1] - r2l_outs[end + 1]]))
             # func_embd = leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([lp_func[0], lp_func[1]]))
             if wemb_lstm:
-                cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([l2r_outs[end] - l2r_outs[start],
-                                r2l_outs[start + 1] - r2l_outs[end + 1]])), pdrop)
+                cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([l2r_outs[end + slide_window] - l2r_outs[start + slide_window],
+                                r2l_outs[start + (1 - slide_window)] - r2l_outs[end + (1 - slide_window)]])), pdrop)
                 func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([lp_func[0], lp_func[1]])), pdrop)
             else:
-                cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([dy.average(l2r_outs[start: end]),
-                                dy.average(r2l_outs[start: end])])), pdrop)
-                func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([lp_func[0], lp_func[1]])), pdrop)
+                if start + 1 != end + 1:
+                    cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([dy.average(l2r_outs[start + 1: end + 1]),
+                                    dy.average(r2l_outs[start + 1: end + 1])])), pdrop)
+                    func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([lp_func[0], lp_func[1]])), pdrop)
+                else:
+                    cont_embd = dy.dropout(leaky_relu(cont_MLP_bias + cont_MLP * dy.concatenate([l2r_outs[start + 1],
+                                    r2l_outs[start + 1]])), pdrop)
+                    func_embd = dy.dropout(leaky_relu(func_MLP_bias + func_MLP * dy.concatenate([lp_func[0], lp_func[1]])), pdrop)
+
 
             # cont_embd = dy.concatenate([l2r_outs[end] - l2r_outs[start],
             #                 r2l_outs[start + 1] - r2l_outs[end + 1]])
@@ -605,12 +571,6 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position, pdrop):
             #                            lp_func[0], lp_func[1]]))
                                        # l2r_outs[end] - l2r_outs[start],
                                        # r2l_outs[start] - r2l_outs[end]]))
-
-    if layer_norm:
-        gain = dy.parameter(params["bemb_gain"])
-        bias = dy.parameter(params["bemb_bias"])
-
-        ret = [dy.layer_norm(bemb, gain, bias) for bemb in ret]
 
     if tanh:
         ret = [dy.tanh(r) for r in ret]
