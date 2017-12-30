@@ -246,10 +246,10 @@ params["cont_MLP_bias"] = pc.add_parameters((word_HIDDEN_DIM * (1 + cont_aux_sep
 params["func_MLP"] = pc.add_parameters((word_HIDDEN_DIM * (1 + cont_aux_separated), word_HIDDEN_DIM * (1 + cont_aux_separated)))
 params["func_MLP_bias"] = pc.add_parameters((word_HIDDEN_DIM * (1 + cont_aux_separated)))
 
-params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM , bunsetsu_HIDDEN_DIM * 2 * (1 + cont_aux_separated)))
+params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM , bunsetsu_HIDDEN_DIM * (1 + cont_aux_separated) // (1 + divide_embd)))
 params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
 
-params["dep_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * 2 * (1 + cont_aux_separated)))
+params["dep_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * (1 + cont_aux_separated) // (1 + divide_embd)))
 params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM))
 
 params["R_bunsetsu_biaffine"] = pc.add_parameters((MLP_HIDDEN_DIM + biaffine_bias_y, MLP_HIDDEN_DIM + biaffine_bias_x))
@@ -311,12 +311,20 @@ def dep_bunsetsu(bembs, pdrop):
     head_MLP_bias = dy.parameter(params["head_MLP_bias"])
 
     R_bunsetsu_biaffine = dy.parameter(params["R_bunsetsu_biaffine"])
-    slen_x = len(bembs)
-    slen_y = slen_x
+
+    input_size = bembs[0].dim()[0][0]
+
+    slen_x = slen_y = len(bembs)
+
+    if divide_embd:
+        bembs_dep = [emb[:(input_size // 2)] for emb in bembs]
+        bembs_head = [emb[(input_size // 2):] for emb in bembs]
+    else:
+        bembs_dep = bembs_head = bembs
 
 
-    bembs_dep = dy.dropout(dy.concatenate(bembs, 1), pdrop)
-    bembs_head = dy.dropout(dy.concatenate(bembs, 1), pdrop)
+    bembs_dep = dy.dropout(dy.concatenate(bembs_dep, 1), pdrop)
+    bembs_head = dy.dropout(dy.concatenate(bembs_head, 1), pdrop)
 
 
     input_size = MLP_HIDDEN_DIM
@@ -473,7 +481,6 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position, pdrop):
         # start = br[0]
         end = br[1] - 2
 
-
         if not cont_aux_separated:
             # ret.append(dy.concatenate([dy.dropout(leaky_relu(l2r_outs[end] - l2r_outs[start]), pdrop),
             #                            dy.dropout(leaky_relu(r2l_outs[start + 1] - r2l_outs[end + 1]), pdrop)]))
@@ -576,8 +583,9 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position, pdrop):
         ret = [dy.tanh(r) for r in ret]
 
     if cont_aux_separated:
-        cont_seq, _, _ = inputs2lstmouts(l2rlstm_cont, r2llstm_cont, cont_seq, pdrop)
-        func_seq, _, _ = inputs2lstmouts(l2rlstm_func, r2llstm_func, func_seq, pdrop)
+        if not divide_embd:
+            cont_seq, _, _ = inputs2lstmouts(l2rlstm_cont, r2llstm_cont, cont_seq, pdrop)
+            func_seq, _, _ = inputs2lstmouts(l2rlstm_func, r2llstm_func, func_seq, pdrop)
 
         # ret = [dy.concatenate([cont_seq[sidx], func_seq[sidx]]) for sidx in range(len(cont_seq))]
         ret = [dy.concatenate([dy.dropout(cont_seq[sidx], pdrop), dy.dropout(func_seq[sidx], pdrop)]) for sidx in range(len(cont_seq))]
