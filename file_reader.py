@@ -79,7 +79,10 @@ class Word:
             else:
                 bi = 'I'
 
-            bipos = bi + '_' + line[3] + '_' + line[4]
+            if config.p_ps_separated:
+                bipos = bi + '_' + line[3]
+            else:
+                bipos = bi + '_' + line[3] + '_' + line[4]
             if i == 0:
                 self.chars.append(Char(line[0][i], bipos, chunk_bi))
             else:
@@ -292,16 +295,16 @@ class DataFrameKtc(DataFrame):
             tmp_wif = []
             tmp_wit = []
 
-            if config.BOS_EOS:
-                # tmp_word.append(wd.x2i["BOS"])
-                tmp_char.append(cd.x2i["BOS"])
-                tmp_word_bipos.append(bpd.x2i["B_BOS"])
-                tmp_chunk_bi.append(0)
-                tmp_pos.append(td.x2i["BOS"])
-                tmp_bi.append(0)
-                tmp_pos_sub.append(tsd.x2i["BOS"])
-                tmp_wif.append(wifd.x2i["BOS"])
-                tmp_wit.append(witd.x2i["BOS"])
+            # if config.BOS_EOS:
+            #     # tmp_word.append(wd.x2i["BOS"])
+            #     tmp_char.append(cd.x2i["BOS"])
+            #     tmp_word_bipos.append(bpd.x2i["B_BOS"])
+            #     tmp_chunk_bi.append(0)
+            #     tmp_pos.append(td.x2i["BOS"])
+            #     tmp_bi.append(0)
+                # tmp_pos_sub.append(tsd.x2i["BOS"])
+                # tmp_wif.append(wifd.x2i["BOS"])
+                # tmp_wit.append(witd.x2i["BOS"])
 
             if config.BOS_EOS:
                 tmp_word.append(wd.x2i["BOS"])
@@ -330,9 +333,11 @@ class DataFrameKtc(DataFrame):
                 tmp_word.append(wd.x2i[wf])
             for cf in sent.char_forms:
                 tmp_char.append(cd.x2i[cf])
+            for p in sent.pos:
+                tmp_pos.append(td.x2i[p])
             for bp in sent.word_biposes:
                 tmp_word_bipos.append(bpd.x2i[bp])
-                tmp_pos.append(td.x2i[bp[2:]])
+                # tmp_pos.append(td.x2i[bp[2:]])
                 tmp_bi.append(0 if bp[0] == 'B' else 1)
             for cbi in sent.chunk_bis:
                 tmp_chunk_bi.append(0 if cbi == 'B' else 1)
@@ -367,16 +372,16 @@ class DataFrameKtc(DataFrame):
                 tmp_wif.append(wifd.x2i["EOS"])
                 tmp_wit.append(witd.x2i["EOS"])
 
-            if config.BOS_EOS:
-                # tmp_word.append(wd.x2i["EOS"])
-                tmp_char.append(cd.x2i["EOS"])
-                tmp_word_bipos.append(bpd.x2i["B_EOS"])
-                tmp_chunk_bi.append(0)
-                tmp_pos.append(td.x2i["EOS"])
-                tmp_bi.append(0)
-                tmp_pos_sub.append(tsd.x2i["EOS"])
-                tmp_wif.append(wifd.x2i["EOS"])
-                tmp_wit.append(witd.x2i["EOS"])
+            # if config.BOS_EOS:
+            #     # tmp_word.append(wd.x2i["EOS"])
+            #     tmp_char.append(cd.x2i["EOS"])
+            #     tmp_word_bipos.append(bpd.x2i["B_EOS"])
+            #     tmp_chunk_bi.append(0)
+            #     tmp_pos.append(td.x2i["EOS"])
+            #     tmp_bi.append(0)
+            #     # tmp_pos_sub.append(tsd.x2i["EOS"])
+            #     # tmp_wif.append(wifd.x2i["EOS"])
+            #     # tmp_wit.append(witd.x2i["EOS"])
 
         return word_seqs, char_seqs, word_bipos_seqs, \
                chunk_bi_seqs, chunk_deps, pos_seqs, bi_seqs, \
