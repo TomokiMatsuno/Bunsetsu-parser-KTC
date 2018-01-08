@@ -509,8 +509,11 @@ def word_embds(char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ranges):
         if config.use_wif_wit:
             pos_lp = dy.concatenate([pos_lp, pos_lp])
 
-        rnd_pos = np.random.randint(0, 3)
-        rnd_word = np.random.randint(0, 3)
+        if embd_dropout != 0:
+            rnd_pos = np.random.randint(0, embd_dropout)
+            rnd_word = np.random.randint(0, embd_dropout)
+        else:
+            rnd_word = rnd_pos = 1
 
         if not TRAIN:
             rnd_word = rnd_pos = 1
