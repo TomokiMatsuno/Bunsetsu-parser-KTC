@@ -158,7 +158,7 @@ class Dict:
                 self.i2x[len(self.i2x)] = ent
                 self.x2i[ent] = len(self.x2i)
             else:
-                self.x2i[ent] = self.x2i["NULL"]
+                self.x2i[ent] = self.x2i["UNK"]
 
     def freeze(self):
         self.freezed = True

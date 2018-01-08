@@ -330,7 +330,7 @@ def dep_bunsetsu(bembs, pdrop):
     head_MLP = dy.parameter(params["head_MLP"])
     head_MLP_bias = dy.parameter(params["head_MLP_bias"])
 
-    R_bunsetsu_biaffine = dy.parameter(params["R_bunsetsu_biaffine"])
+    R_bunsetsu_biaffine = dy.dropout(dy.parameter(params["R_bunsetsu_biaffine"]), pdrop)
 
     input_size = bembs[0].dim()[0][0]
 
@@ -521,7 +521,11 @@ def word_embds(char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ranges):
             else:
                 word_form = lp_w[wd.x2i[str]]
         else:
-            word_form = lp_w[wd.x2i["UNK"]]
+            if config.use_wif_wit:
+                word_form = dy.concatenate([lp_w[wd.x2i["UNK"]], lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
+            else:
+                word_form = lp_w[wd.x2i["UNK"]]
+
 
         if rnd_pos == 0:
             pos_lp = pos_lp - pos_lp
@@ -724,7 +728,7 @@ def train(char_seqs,
         num_tot_cor_bunsetsu_dep_not_argmax = 0
         tot_loss_in_iter = 0
 
-        for i in (range(len(char_seqs) // config.divide_train)):
+        for i in (range((len(char_seqs) // batch_size) * batch_size)):
             if i % batch_size == 0:
                 losses_bunsetsu = []
                 losses_arcs = []
