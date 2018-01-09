@@ -21,13 +21,13 @@ train_loss = []
 dev_loss = []
 acc = []
 
-def plot_loss(plt, loss, num_epoc, subplot_idx, xlim, ylim):
+def plot_loss(plt, loss, num_epoc, subplot_idx, xlim, ylim, ylim_lower):
     x = np.arange(0, num_epoc)
     y = np.array(loss)
     plt.subplot(2, 2, subplot_idx)
     plt.plot(x, y)
     plt.xlim(0, xlim)
-    plt.ylim(0, ylim)
+    plt.ylim(ylim_lower, ylim)
 
     return
 
@@ -250,8 +250,8 @@ if not orthonormal:
 
     # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc, layer_norm)
     # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc, layer_norm)
-    l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc, layer_norm)
-    r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc, layer_norm)
+    l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
 
     l2rlstm_cont = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc, layer_norm)
     r2llstm_cont = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc, layer_norm)
@@ -270,8 +270,8 @@ else:
 
     # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
     # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc)
+    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
 
     if False and cont_aux_separated:
         l2rlstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
@@ -721,7 +721,7 @@ def bilinear(x, W, y, input_size, seq_len_x, seq_len_y, batch_size, num_outputs=
 
     nx, ny = input_size + bias_x, input_size + bias_y
     # W: (num_outputs x ny) x nx
-    lin = dy.dropout(W * x, pdrop)
+    lin = W * x
     if num_outputs > 1:
         lin = dy.reshape(lin, (ny, num_outputs * seq_len_y), batch_size=batch_size)
     blin = dy.transpose(y) * lin
@@ -785,6 +785,8 @@ def train(char_seqs,
     losses_bunsetsu = []
     losses_arcs = []
     prev = time.time()
+    train_loss_in_iter = 0
+    # train_loss.append([0])
 
 
 
@@ -832,6 +834,9 @@ def train(char_seqs,
             if wemb_lstm:
                 wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
+            if relu_toprecur:
+                wembs = [leaky_relu(wemb) for wemb in wembs]
+
             if chunker:
                 loss_bi_bunsetsu, bi_bunsetsu_preds, _ = bi_bunsetsu(wembs, bi_w_seq)
                 losses_bunsetsu.append(loss_bi_bunsetsu)
@@ -846,13 +851,18 @@ def train(char_seqs,
                 bembs = bunsetsu_embds(wembs, wembs, bunsetsu_ranges, aux_positions, pdrop_lstm)
 
             if bemb_lstm:
-                # bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_lstm)
-                bembs_l2r = inputs2singlelstmouts(l2rlstm_bunsetsu, bembs_l2r, pdrop)
-                bembs_r2l = inputs2singlelstmouts(r2llstm_bunsetsu, bembs_r2l, pdrop)
-                bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
+                if cont_aux_separated:
+                    bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_lstm)
+                else:
+                    bembs_l2r = inputs2singlelstmouts(l2rlstm_bunsetsu, bembs_l2r, pdrop)
+                    bembs_r2l = inputs2singlelstmouts(r2llstm_bunsetsu, bembs_r2l, pdrop)
+                    bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
 
             if rel_embd:
                 bembs = [dy.concatenate([bemb, rel_embds(bemb, pdrop)]) for bemb in bembs]
+
+            if relu_toprecur:
+                bembs = [leaky_relu(bemb) for bemb in bembs]
 
             arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs, pdrop_lstm)
 
@@ -885,7 +895,8 @@ def train(char_seqs,
             print("time in this iter: ", time.time() - prev)
         prev = time.time()
         print(it, "\t[train] average loss:\t", tot_loss_in_iter / len(train_sents))
-        train_loss.append(tot_loss_in_iter / len(train_sents))
+        train_loss_in_iter = tot_loss_in_iter / len(train_sents)
+        train_loss.extend([train_loss_in_iter])
 
 
 def dev(char_seqs,
@@ -940,6 +951,9 @@ def dev(char_seqs,
         if wemb_lstm:
             wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
+        if relu_toprecur:
+            wembs = [leaky_relu(wemb) for wemb in wembs]
+
         if chunker:
             loss_bi_b, preds_bi_b, num_cor_bi_b = bi_bunsetsu(wembs, bi_w_seq)
             num_tot_bi_b += len(wembs)
@@ -976,13 +990,18 @@ def dev(char_seqs,
             bembs = bunsetsu_embds(wembs, wembs, gold_bunsetsu_ranges, aux_positions, pdrop_lstm)
 
         if bemb_lstm:
-            # bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_lstm)
-            bembs_l2r = inputs2singlelstmouts(l2rlstm_bunsetsu, bembs_l2r, pdrop_lstm)
-            bembs_r2l = inputs2singlelstmouts(r2llstm_bunsetsu, bembs_r2l, pdrop_lstm)
-            bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
+            if cont_aux_separated:
+                bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_lstm)
+            else:
+                bembs_l2r = inputs2singlelstmouts(l2rlstm_bunsetsu, bembs_l2r, pdrop)
+                bembs_r2l = inputs2singlelstmouts(r2llstm_bunsetsu, bembs_r2l, pdrop)
+                bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
 
         if rel_embd:
             bembs = [dy.concatenate([bemb, rel_embds(bemb, pdrop)]) for bemb in bembs]
+
+        if relu_toprecur:
+            bembs = [leaky_relu(bemb) for bemb in bembs]
 
         if i % show_acc_every == 0 and i != 0:
             if chunker and num_tot_bi_b > 0:
@@ -1028,7 +1047,8 @@ def dev(char_seqs,
 
 
     print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep, end='\t')
-    acc.append(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
+    # acc.append(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
+    acc.extend([num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep] * train_iter)
     if output_result:
         with open(result_file, mode='a', encoding='utf-8') as f:
             f.write(str(i) + " accuracy dep " + str(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep) + '\n')
@@ -1041,7 +1061,8 @@ def dev(char_seqs,
                 f.write("failed_chunking: " + str(failed_chunking)+ '\n')
 
     print("[dev]average loss: " + str(total_loss / len(dev_sents)))
-    dev_loss.append(total_loss / len(dev_sents))
+    # dev_loss.append(total_loss / len(dev_sents))
+    dev_loss.extend([total_loss / len(dev_sents)] * train_iter)
     if chunker:
         print("complete_chunking rate: " + str(complete_chunking / len(char_seqs)))
         print("failed_chunking rate: " + str(failed_chunking / len(char_seqs)))
@@ -1082,10 +1103,13 @@ for e in range(epoc):
     if not TEST:
         train(train_char_seqs, train_pos_seqs, train_pos_sub_seqs, train_wif_seqs, train_wit_seqs, train_word_bi_seqs, train_chunk_bi_seqs)
     # plot_loss(plt, train_loss, prev_epoc, "train_loss.png")
-    if train_loss_ylim == 0.0:
+    if train_loss_ylim <= train_loss[-1]:
         train_loss_ylim = train_loss[-1] + 0.1
 
-    plot_loss(plt, train_loss, prev_epoc, 1, train_loss_xlim, train_loss_ylim)
+    plot_loss(plt, train_loss, prev_epoc, 1, train_loss_xlim, train_loss_ylim, 0)
+
+    print("time: ", time.time() - prev)
+    prev = time.time()
 
     pdrop = 0.0
     pdrop_lstm = 0.0
@@ -1094,12 +1118,16 @@ for e in range(epoc):
 
     dev(dev_char_seqs, dev_pos_seqs, dev_pos_sub_seqs, dev_wif_seqs, dev_wit_seqs, dev_word_bi_seqs, dev_chunk_bi_seqs)
 
-    if dev_loss_ylim == 0.0:
+    if dev_loss_ylim <= dev_loss[-1]:
         dev_loss_ylim = dev_loss[-1] + 0.1
+    if dev_loss_ylim_lower >= dev_loss[-1]:
+        dev_loss_ylim_lower = dev_loss[-1] - 0.1
+    if accuracy_ylim_lower >= acc[-1]:
+        accuracy_ylim_lower = acc[-1] - 0.1
 
 
-    plot_loss(plt, dev_loss, prev_epoc, 2, dev_loss_xlim, dev_loss_ylim)
-    plot_loss(plt, acc, prev_epoc, 3, accuracy_xlim, accuracy_ylim)
+    plot_loss(plt, dev_loss, prev_epoc, 2, dev_loss_xlim, dev_loss_ylim, dev_loss_ylim_lower)
+    plot_loss(plt, acc, prev_epoc, 3, accuracy_xlim, accuracy_ylim, accuracy_ylim_lower)
 
     with open(detail_file, mode='w', encoding='utf-8') as f:
         f.write("train_loss" + '\t')
