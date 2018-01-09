@@ -3,6 +3,8 @@ from collections import defaultdict
 import numpy as np
 import dynet as dy
 import matplotlib.pyplot as plt
+import os
+import shutil
 
 from config import *
 import config
@@ -62,17 +64,18 @@ if JOS:
 if MINI_SET:
     files = [path2KTC + 'miniKTC_train.txt', path2KTC + 'miniKTC_dev.txt']
 
-save_file = 'KTC' + \
-            '_LAYERS-c' + str(LAYERS_character) + \
-            '_LAYERS-w' + str(LAYERS_word) + \
-            '_LAYERS-b' + str(LAYERS_bunsetsu) + \
-            '_wHD' + str(word_HIDDEN_DIM) + \
-            '_bHD' + str(bunsetsu_HIDDEN_DIM) + \
-            '_MLP-HD' + str(MLP_HIDDEN_DIM) + \
-            '_INP-D' + str(INPUT_DIM) + \
-            '_batch' + str(batch_size) + \
-            '_pdrop' + str(pdrop) + \
-            '_pdrop_b' + str(pdrop_lstm)
+# save_file = 'KTC' + \
+save_file = 'KTC'
+            # '_LAYERS-c' + str(LAYERS_character) + \
+            # '_LAYERS-w' + str(LAYERS_word) + \
+            # '_LAYERS-b' + str(LAYERS_bunsetsu) + \
+            # '_wHD' + str(word_HIDDEN_DIM) + \
+            # '_bHD' + str(bunsetsu_HIDDEN_DIM) + \
+            # '_MLP-HD' + str(MLP_HIDDEN_DIM) + \
+            # '_INP-D' + str(INPUT_DIM) + \
+            # '_batch' + str(batch_size) + \
+            # '_pdrop' + str(pdrop) + \
+            # '_pdrop_b' + str(pdrop_lstm)
             #'_learning-rate' + str(learning_rate) + \
 
 split_name = ""
@@ -86,42 +89,63 @@ elif MINI_SET:
 
 save_file = save_file + split_name
 
-if cont_aux_separated:
-    save_file = save_file + "_cont_aux_separated"
+# if cont_aux_separated:
+#     save_file = save_file + "_cont_aux_separated"
+#
+# if scheduled_learning:
+#     save_file = save_file + "_scheduledLearning"
+#
+# if use_annealing:
+#     save_file = save_file + "_use-annealing"
+#
+# if only_cont:
+#     save_file = save_file + "_onlycont"
+#
+# if only_func:
+#     save_file = save_file + "_onlyfunc"
+#
+# if use_cembs:
+#     save_file = save_file + "_cembs"
+#
+# if wemb_lstm:
+#     save_file = save_file + "_wemblstm"
+#
+# if divide_embd:
+#     save_file = save_file + "_divideEmbd"
+#
+# if layer_norm:
+#     save_file = save_file + "_layernorm"
+#
+# if use_wif_wit:
+#     save_file = save_file + "_wift"
+#
+# save_file = save_file + "_iterSize" + str(num_sent_in_iter)
 
-if scheduled_learning:
-    save_file = save_file + "_scheduledLearning"
 
-if use_annealing:
-    save_file = save_file + "_use-annealing"
+fidx = 0
+save_file_valify = save_file
 
-if only_cont:
-    save_file = save_file + "_onlycont"
+while os.path.exists(save_file_valify):
+    save_file_valify = save_file + str(fidx)
+    fidx += 1
 
-if only_func:
-    save_file = save_file + "_onlyfunc"
+save_file = save_file_valify
 
-if use_cembs:
-    save_file = save_file + "_cembs"
+directory = save_file + "/"
+if not os.path.exists(directory):
+    os.makedirs(directory)
 
-if wemb_lstm:
-    save_file = save_file + "_wemblstm"
-
-if divide_embd:
-    save_file = save_file + "_divideEmbd"
-
-if layer_norm:
-    save_file = save_file + "_layernorm"
-
-if use_wif_wit:
-    save_file = save_file + "_wift"
-
-save_file = save_file + "_iterSize" + str(num_sent_in_iter)
 
 load_file = save_file
-detail_file = save_file + "_detail.txt"
 
-result_file = save_file + "_result.txt"
+detail_file = directory + "detail.txt"
+result_file = directory + "result.txt"
+save_file = directory + "parameter"
+
+python_codes = glob.glob('./*.py')
+for pycode in python_codes:
+    shutil.copy2(pycode, directory)
+
 
 
 
@@ -235,22 +259,26 @@ if not orthonormal:
     l2rlstm_func = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc, layer_norm)
     r2llstm_func = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc, layer_norm)
 else:
-    l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
-    r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM, pc)
+    l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc)
+    r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc)
 
-    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * (2 * (use_cembs + 1)), word_HIDDEN_DIM, pc)
-    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * (2 * (use_cembs + 1)), word_HIDDEN_DIM, pc)
-    # if not cont_aux_separated:
-        # l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-        # r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2 * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, bunsetsu_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, bunsetsu_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
-    # else:
-    l2rlstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
+    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), word_HIDDEN_DIM, pc)
+    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), word_HIDDEN_DIM, pc)
 
-    l2rlstm_func = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_func = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
+    # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
+    # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
+
+    # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc)
+    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc)
+
+    if False and cont_aux_separated:
+        l2rlstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
+
+        l2rlstm_func = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_func = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
 
 
 params = {}
@@ -1054,12 +1082,10 @@ for e in range(epoc):
     if not TEST:
         train(train_char_seqs, train_pos_seqs, train_pos_sub_seqs, train_wif_seqs, train_wit_seqs, train_word_bi_seqs, train_chunk_bi_seqs)
     # plot_loss(plt, train_loss, prev_epoc, "train_loss.png")
+    if train_loss_ylim == 0.0:
+        train_loss_ylim = train_loss[-1] + 0.1
+
     plot_loss(plt, train_loss, prev_epoc, 1, train_loss_xlim, train_loss_ylim)
-    with open(detail_file, mode='w', encoding='utf-8') as f:
-        f.write("train_loss" + '\t')
-        for tl in train_loss:
-            f.write(str(tl) + '\t')
-        f.write("\n")
 
     pdrop = 0.0
     pdrop_lstm = 0.0
@@ -1068,16 +1094,24 @@ for e in range(epoc):
 
     dev(dev_char_seqs, dev_pos_seqs, dev_pos_sub_seqs, dev_wif_seqs, dev_wit_seqs, dev_word_bi_seqs, dev_chunk_bi_seqs)
 
-    # plot_loss(plt, dev_loss, prev_epoc, "dev_loss.png")
-    # plot_loss(plt, acc, prev_epoc, "accuracy.png")
+    if dev_loss_ylim == 0.0:
+        dev_loss_ylim = dev_loss[-1] + 0.1
+
+
     plot_loss(plt, dev_loss, prev_epoc, 2, dev_loss_xlim, dev_loss_ylim)
     plot_loss(plt, acc, prev_epoc, 3, accuracy_xlim, accuracy_ylim)
 
-    with open(detail_file, mode='a', encoding='utf-8') as f:
+    with open(detail_file, mode='w', encoding='utf-8') as f:
+        f.write("train_loss" + '\t')
+        for tl in train_loss:
+            f.write(str(tl) + '\t')
+        f.write("\n")
+
         f.write("dev_loss" + '\t')
         for dl in dev_loss:
             f.write(str(dl) + '\t')
         f.write("\n")
+
         f.write("accuracy" + '\t')
         for a in acc:
             f.write(str(a) + '\t')
@@ -1086,7 +1120,7 @@ for e in range(epoc):
     # plt.subplot(224)
     # plt.text(0, 0, str(best_acc))
     # plt.text(0, 1, str(least_loss))
-    plt.savefig(save_file + "_image.png")
+    plt.savefig(directory + "image.png")
 
     global early_stop_count
     if not update:
