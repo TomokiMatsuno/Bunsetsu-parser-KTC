@@ -2,6 +2,7 @@ from collections import defaultdict
 
 import numpy as np
 import dynet as dy
+import matplotlib.pyplot as plt
 
 from config import *
 import config
@@ -13,10 +14,19 @@ import time
 
 from paths import *
 from file_reader import DataFrameKtc
-global circle_count, root_0, root_more_than_1
-circle_count = 0
-root_0 = 0
-root_more_than_1 = 0
+
+train_loss = []
+dev_loss = []
+acc = []
+
+def plot_loss(plt, loss, num_epoc, subplot_idx):
+    x = np.arange(0, num_epoc)
+    y = np.array(loss)
+    plt.subplot(2, 2, subplot_idx)
+    plt.plot(x, y)
+
+    return
+
 
 
 train_dev_boundary = -1
@@ -100,6 +110,10 @@ if divide_embd:
 
 if layer_norm:
     save_file = save_file + "_layernorm"
+
+if use_wif_wit:
+    save_file = save_file + "_wift"
+
 load_file = save_file
 
 result_file = save_file + "_result.txt"
@@ -837,6 +851,7 @@ def train(char_seqs,
             print("time in this iter: ", time.time() - prev)
         prev = time.time()
         print(it, "\t[train] average loss:\t", tot_loss_in_iter / len(train_sents))
+        train_loss.append(tot_loss_in_iter / len(train_sents))
 
 
 def dev(char_seqs,
@@ -979,6 +994,7 @@ def dev(char_seqs,
 
 
     print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep, end='\t')
+    acc.append(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
     if output_result:
         with open(result_file, mode='a', encoding='utf-8') as f:
             f.write(str(i) + " accuracy dep " + str(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep) + '\n')
@@ -991,6 +1007,7 @@ def dev(char_seqs,
                 f.write("failed_chunking: " + str(failed_chunking)+ '\n')
 
     print("[dev]average loss: " + str(total_loss / len(dev_sents)))
+    dev_loss.append(total_loss / len(dev_sents))
     if chunker:
         print("complete_chunking rate: " + str(complete_chunking / len(char_seqs)))
         print("failed_chunking rate: " + str(failed_chunking / len(char_seqs)))
@@ -1030,6 +1047,9 @@ for e in range(epoc):
 
     if not TEST:
         train(train_char_seqs, train_pos_seqs, train_pos_sub_seqs, train_wif_seqs, train_wit_seqs, train_word_bi_seqs, train_chunk_bi_seqs)
+    # plot_loss(plt, train_loss, prev_epoc, "train_loss.png")
+    plot_loss(plt, train_loss, prev_epoc, 1)
+
 
     pdrop = 0.0
     pdrop_lstm = 0.0
@@ -1037,6 +1057,12 @@ for e in range(epoc):
     update = False
 
     dev(dev_char_seqs, dev_pos_seqs, dev_pos_sub_seqs, dev_wif_seqs, dev_wit_seqs, dev_word_bi_seqs, dev_chunk_bi_seqs)
+
+    # plot_loss(plt, dev_loss, prev_epoc, "dev_loss.png")
+    # plot_loss(plt, acc, prev_epoc, "accuracy.png")
+    plot_loss(plt, dev_loss, prev_epoc, 2)
+    plot_loss(plt, acc, prev_epoc, 3)
+    plt.savefig(save_file + "_image.png")
 
     global early_stop_count
     if not update:
