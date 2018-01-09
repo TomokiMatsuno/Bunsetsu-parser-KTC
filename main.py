@@ -19,11 +19,13 @@ train_loss = []
 dev_loss = []
 acc = []
 
-def plot_loss(plt, loss, num_epoc, subplot_idx):
+def plot_loss(plt, loss, num_epoc, subplot_idx, xlim, ylim):
     x = np.arange(0, num_epoc)
     y = np.array(loss)
     plt.subplot(2, 2, subplot_idx)
     plt.plot(x, y)
+    plt.xlim(0, xlim)
+    plt.ylim(0, ylim)
 
     return
 
@@ -114,7 +116,10 @@ if layer_norm:
 if use_wif_wit:
     save_file = save_file + "_wift"
 
+save_file = save_file + "_iterSize" + str(num_sent_in_iter)
+
 load_file = save_file
+detail_file = save_file + "_detail.txt"
 
 result_file = save_file + "_result.txt"
 
@@ -766,7 +771,8 @@ def train(char_seqs,
         num_tot_cor_bunsetsu_dep_not_argmax = 0
         tot_loss_in_iter = 0
 
-        for i in (range((len(char_seqs) // batch_size) * batch_size)):
+        # for i in (range((len(char_seqs) // batch_size) * batch_size)):
+        for i in range(num_sent_in_iter):
             if i % batch_size == 0:
                 losses_bunsetsu = []
                 losses_arcs = []
@@ -1048,8 +1054,12 @@ for e in range(epoc):
     if not TEST:
         train(train_char_seqs, train_pos_seqs, train_pos_sub_seqs, train_wif_seqs, train_wit_seqs, train_word_bi_seqs, train_chunk_bi_seqs)
     # plot_loss(plt, train_loss, prev_epoc, "train_loss.png")
-    plot_loss(plt, train_loss, prev_epoc, 1)
-
+    plot_loss(plt, train_loss, prev_epoc, 1, train_loss_xlim, train_loss_ylim)
+    with open(detail_file, mode='w', encoding='utf-8') as f:
+        f.write("train_loss" + '\t')
+        for tl in train_loss:
+            f.write(str(tl) + '\t')
+        f.write("\n")
 
     pdrop = 0.0
     pdrop_lstm = 0.0
@@ -1060,8 +1070,22 @@ for e in range(epoc):
 
     # plot_loss(plt, dev_loss, prev_epoc, "dev_loss.png")
     # plot_loss(plt, acc, prev_epoc, "accuracy.png")
-    plot_loss(plt, dev_loss, prev_epoc, 2)
-    plot_loss(plt, acc, prev_epoc, 3)
+    plot_loss(plt, dev_loss, prev_epoc, 2, dev_loss_xlim, dev_loss_ylim)
+    plot_loss(plt, acc, prev_epoc, 3, accuracy_xlim, accuracy_ylim)
+
+    with open(detail_file, mode='a', encoding='utf-8') as f:
+        f.write("dev_loss" + '\t')
+        for dl in dev_loss:
+            f.write(str(dl) + '\t')
+        f.write("\n")
+        f.write("accuracy" + '\t')
+        for a in acc:
+            f.write(str(a) + '\t')
+
+
+    # plt.subplot(224)
+    # plt.text(0, 0, str(best_acc))
+    # plt.text(0, 1, str(least_loss))
     plt.savefig(save_file + "_image.png")
 
     global early_stop_count
