@@ -42,6 +42,7 @@ if CABOCHA_SPLIT:
 best_acc = 0.0
 least_loss = 1000.0
 update = False
+global early_stop_count
 early_stop_count = 0
 
 
@@ -215,13 +216,22 @@ for dcd in dev_chunk_deps:
 print(total_chunks)
 
 ###Neural Network
-WORDS_SIZE = len(wd.appeared_i2x) + 1
-CHARS_SIZE = len(cd.appeared_i2x) + 1
-BIPOS_SIZE = len(bpd.appeared_i2x) + 1
-POS_SIZE = len(td.appeared_i2x) + 1
-POSSUB_SIZE = len(tsd.appeared_i2x) + 1
-WIF_SIZE = len(wifd.appeared_i2x) + 1
-WIT_SIZE = len(witd.appeared_i2x) + 1
+# WORDS_SIZE = len(wd.appeared_i2x) + 1
+# CHARS_SIZE = len(cd.appeared_i2x) + 1
+# BIPOS_SIZE = len(bpd.appeared_i2x) + 1
+# POS_SIZE = len(td.appeared_i2x) + 1
+# POSSUB_SIZE = len(tsd.appeared_i2x) + 1
+# WIF_SIZE = len(wifd.appeared_i2x) + 1
+# WIT_SIZE = len(witd.appeared_i2x) + 1
+
+WORDS_SIZE = len(wd.i2x) + 1
+CHARS_SIZE = len(cd.i2x) + 1
+BIPOS_SIZE = len(bpd.i2x) + 1
+POS_SIZE = len(td.i2x) + 1
+POSSUB_SIZE = len(tsd.i2x) + 1
+WIF_SIZE = len(wifd.i2x) + 1
+WIT_SIZE = len(witd.i2x) + 1
+
 
 pc = dy.ParameterCollection()
 
@@ -811,9 +821,11 @@ def train(char_seqs,
         num_tot_cor_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep_not_argmax = 0
         tot_loss_in_iter = 0
+        sent_ids = [sent_id for sent_id in range(len(char_seqs))]
+        np.random.shuffle(sent_ids)
 
         # for i in (range((len(char_seqs) // batch_size) * batch_size)):
-        for i in range(num_sent_in_iter // divide_train):
+        for i in range(len(char_seqs) // divide_train):
             if i % batch_size == 0:
                 losses_bunsetsu = []
                 losses_arcs = []
@@ -821,7 +833,8 @@ def train(char_seqs,
                 dy.renew_cg()
 
             if random_pickup:
-                idx = i if not TRAIN else np.random.randint(len(char_seqs))
+                # idx = i if not TRAIN else np.random.randint(len(char_seqs))
+                idx = i if not TRAIN else sent_ids[i]
             else:
                 idx = i
 

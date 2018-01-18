@@ -155,21 +155,30 @@ class Dict:
             for ent in line:
                 self.add_entry(ent)
 
+    # def add_entry(self, ent):
+    #     if ent not in self.x2i or self.x2i[ent] == self.x2i["UNK"]:
+    #         if ((not self.freezed) and ent in self.appeared_x2i) or ent in self.initial_entries:
+    #             if ent in self.initial_entries:
+    #                 self.i2x[len(self.i2x)] = ent
+    #                 self.x2i[ent] = len(self.x2i)
+    #                 self.appeared_x2i[ent] = len(self.appeared_x2i)
+    #                 self.appeared_i2x[len(self.appeared_i2x)] = ent
+    #             else:
+    #                 self.i2x[self.appeared_x2i[ent]] = ent
+    #                 self.x2i[ent] = self.appeared_x2i[ent]#len(self.x2i)
+    #         else:
+    #             self.appeared_x2i[ent] = len(self.appeared_x2i)
+    #             self.appeared_i2x[len(self.appeared_i2x)] = ent
+    #             self.x2i[ent] = self.x2i["UNK"]
+
     def add_entry(self, ent):
-        if ent not in self.x2i or self.x2i[ent] == self.x2i["UNK"]:
-            if ((not self.freezed) and ent in self.appeared_x2i) or ent in self.initial_entries:
-                if ent in self.initial_entries:
-                    self.i2x[len(self.i2x)] = ent
-                    self.x2i[ent] = len(self.x2i)
-                    self.appeared_x2i[ent] = len(self.appeared_x2i)
-                    self.appeared_i2x[len(self.appeared_i2x)] = ent
-                else:
-                    self.i2x[self.appeared_x2i[ent]] = ent
-                    self.x2i[ent] = self.appeared_x2i[ent]#len(self.x2i)
+        if ent not in self.x2i:
+            if not self.freezed:
+                self.i2x[len(self.i2x)] = ent
+                self.x2i[ent] = len(self.x2i)
             else:
-                self.appeared_x2i[ent] = len(self.appeared_x2i)
-                self.appeared_i2x[len(self.appeared_i2x)] = ent
                 self.x2i[ent] = self.x2i["UNK"]
+
 
     def freeze(self):
         self.freezed = True
