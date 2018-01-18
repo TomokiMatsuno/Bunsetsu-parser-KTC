@@ -215,13 +215,13 @@ for dcd in dev_chunk_deps:
 print(total_chunks)
 
 ###Neural Network
-WORDS_SIZE = len(wd.i2x) + 1
-CHARS_SIZE = len(cd.i2x) + 1
-BIPOS_SIZE = len(bpd.i2x) + 1
-POS_SIZE = len(td.i2x) + 1
-POSSUB_SIZE = len(tsd.i2x) + 1
-WIF_SIZE = len(wifd.i2x) + 1
-WIT_SIZE = len(witd.i2x) + 1
+WORDS_SIZE = len(wd.appeared_i2x) + 1
+CHARS_SIZE = len(cd.appeared_i2x) + 1
+BIPOS_SIZE = len(bpd.appeared_i2x) + 1
+POS_SIZE = len(td.appeared_i2x) + 1
+POSSUB_SIZE = len(tsd.appeared_i2x) + 1
+WIF_SIZE = len(wifd.appeared_i2x) + 1
+WIT_SIZE = len(witd.appeared_i2x) + 1
 
 pc = dy.ParameterCollection()
 
@@ -247,11 +247,12 @@ if not orthonormal:
 
     # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc, layer_norm)
     # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc, layer_norm)
-
-    # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc, layer_norm)
-    # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc, layer_norm)
-    l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
-    r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
+    if bembs_average_flag:
+        l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
+        r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
+    else:
+        l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
+        r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
 
     l2rlstm_cont = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc, layer_norm)
     r2llstm_cont = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc, layer_norm)
@@ -268,10 +269,12 @@ else:
     # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
     # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
 
-    # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-    # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+    if bembs_average_flag:
+        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc)
+    else:
+        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
 
     if False and cont_aux_separated:
         l2rlstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
@@ -770,6 +773,14 @@ def aux_position(bunsetsu_ranges, pos_seq):
     return ret
 
 
+def bembs_average(wembs, ranges):
+    ret = []
+    for r in ranges[1:-1]:
+        tmp = []
+        for widx in range(r[0], r[1]):
+            tmp.append(wembs[widx])
+        ret.append(dy.average(tmp))
+    return ret
 
 
 cor_parsed_count = defaultdict(int)
@@ -802,7 +813,7 @@ def train(char_seqs,
         tot_loss_in_iter = 0
 
         # for i in (range((len(char_seqs) // batch_size) * batch_size)):
-        for i in range(num_sent_in_iter):
+        for i in range(num_sent_in_iter // divide_train):
             if i % batch_size == 0:
                 losses_bunsetsu = []
                 losses_arcs = []
@@ -848,16 +859,21 @@ def train(char_seqs,
                 # bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_positions, pdrop_lstm)
                 bembs, bembs_l2r, bembs_r2l = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_positions, pdrop_lstm)
             else:
-                bembs = bunsetsu_embds(wembs, wembs, bunsetsu_ranges, aux_positions, pdrop_lstm)
+                if bembs_average_flag:
+                    bembs = bembs_average(wembs, bunsetsu_ranges)
+                else:
+                    bembs = bunsetsu_embds(wembs, wembs, bunsetsu_ranges, aux_positions, pdrop_lstm)
 
             if bemb_lstm:
                 if cont_aux_separated:
                     bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_lstm)
                 else:
-                    bembs_l2r = inputs2singlelstmouts(l2rlstm_bunsetsu, bembs_l2r, pdrop)
-                    bembs_r2l = inputs2singlelstmouts(r2llstm_bunsetsu, bembs_r2l, pdrop)
-                    bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
-
+                    if not bembs_average_flag:
+                        bembs_l2r = inputs2singlelstmouts(l2rlstm_bunsetsu, bembs_l2r, pdrop)
+                        bembs_r2l = inputs2singlelstmouts(r2llstm_bunsetsu, bembs_r2l, pdrop)
+                        bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
+                    else:
+                        bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_lstm)
             if rel_embd:
                 bembs = [dy.concatenate([bemb, rel_embds(bemb, pdrop)]) for bemb in bembs]
 
@@ -925,7 +941,7 @@ def dev(char_seqs,
     # print(pdrop_lstm)
     total_loss = 0
 
-    for i in range(len(char_seqs)):
+    for i in range(len(char_seqs) // divide_dev):
         dy.renew_cg()
         if len(char_seqs[i]) == 0:
             continue
@@ -989,13 +1005,25 @@ def dev(char_seqs,
         else:
             bembs = bunsetsu_embds(wembs, wembs, gold_bunsetsu_ranges, aux_positions, pdrop_lstm)
 
+        if wemb_lstm:
+            # bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_positions, pdrop_lstm)
+            bembs, bembs_l2r, bembs_r2l = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges, aux_positions, pdrop_lstm)
+        else:
+            if bembs_average_flag:
+                bembs = bembs_average(wembs, gold_bunsetsu_ranges)
+            else:
+                bembs = bunsetsu_embds(wembs, wembs, gold_bunsetsu_ranges, aux_positions, pdrop_lstm)
+
         if bemb_lstm:
             if cont_aux_separated:
                 bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_lstm)
             else:
-                bembs_l2r = inputs2singlelstmouts(l2rlstm_bunsetsu, bembs_l2r, pdrop)
-                bembs_r2l = inputs2singlelstmouts(r2llstm_bunsetsu, bembs_r2l, pdrop)
-                bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
+                if not bembs_average_flag:
+                    bembs_l2r = inputs2singlelstmouts(l2rlstm_bunsetsu, bembs_l2r, pdrop)
+                    bembs_r2l = inputs2singlelstmouts(r2llstm_bunsetsu, bembs_r2l, pdrop)
+                    bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
+                else:
+                    bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_lstm)
 
         if rel_embd:
             bembs = [dy.concatenate([bemb, rel_embds(bemb, pdrop)]) for bemb in bembs]

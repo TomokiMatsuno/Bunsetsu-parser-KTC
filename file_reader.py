@@ -142,7 +142,10 @@ class Dict:
     def __init__(self, doc, initial_entries=None):
         self.i2x = {}
         self.x2i = {}
+        self.appeared_x2i = {}
+        self.appeared_i2x = {}
         self.freezed = False
+        self.initial_entries = initial_entries
 
         if initial_entries is not None:
             for ent in initial_entries:
@@ -153,11 +156,19 @@ class Dict:
                 self.add_entry(ent)
 
     def add_entry(self, ent):
-        if ent not in self.x2i:
-            if not self.freezed:
-                self.i2x[len(self.i2x)] = ent
-                self.x2i[ent] = len(self.x2i)
+        if ent not in self.x2i or self.x2i[ent] == self.x2i["UNK"]:
+            if ((not self.freezed) and ent in self.appeared_x2i) or ent in self.initial_entries:
+                if ent in self.initial_entries:
+                    self.i2x[len(self.i2x)] = ent
+                    self.x2i[ent] = len(self.x2i)
+                    self.appeared_x2i[ent] = len(self.appeared_x2i)
+                    self.appeared_i2x[len(self.appeared_i2x)] = ent
+                else:
+                    self.i2x[self.appeared_x2i[ent]] = ent
+                    self.x2i[ent] = self.appeared_x2i[ent]#len(self.x2i)
             else:
+                self.appeared_x2i[ent] = len(self.appeared_x2i)
+                self.appeared_i2x[len(self.appeared_i2x)] = ent
                 self.x2i[ent] = self.x2i["UNK"]
 
     def freeze(self):
@@ -252,7 +263,7 @@ class DataFrameKtc(DataFrame):
             initial_entries = ["NULL", "UNK", "ROOT", "BOS", "EOS"]
         wd = Dict(doc_word_forms, initial_entries)
         cd = Dict(doc_char_forms, initial_entries)
-        bpd = Dict(doc_word_biposes, ["NULL", "B_ROOT", "B_BOS", "B_EOS"])
+        bpd = Dict(doc_word_biposes, ["NULL", "UNK", "B_ROOT", "B_BOS", "B_EOS"])
         td = Dict(doc_pos, initial_entries)
         tsd = Dict(doc_pos_sub, initial_entries)
         wif = Dict(doc_word_inflection_forms, initial_entries)
