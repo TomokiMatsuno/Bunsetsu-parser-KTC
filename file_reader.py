@@ -70,6 +70,7 @@ class Word:
     def __init__(self, line, chunk_bi):
         self.feats = []
         self.chars = []
+        self.chunk_bi = chunk_bi
         for token in line:
             self.feats.append(token)
 
@@ -125,10 +126,11 @@ class Sent:
                 self.pos_sub.append(word.feats[4])
                 self.word_inflection_forms.append(word.feats[5])
                 self.word_inflection_types.append(word.feats[6])
+                self.chunk_bis.append(word.chunk_bi)
                 for char in word.chars:
                     self.char_forms.append(char.form)
                     self.word_biposes.append(char.word_bipos)
-                    self.chunk_bis.append(char.chunk_bi)
+                    # self.chunk_bis.append(char.chunk_bi)
 
 
 
@@ -270,9 +272,11 @@ class DataFrameKtc(DataFrame):
 
         if initial_entries is None:
             initial_entries = ["NULL", "UNK", "ROOT", "BOS", "EOS"]
+        if config.insert_dummy:
+            initial_entries = initial_entries + ["DUMMY"]
         wd = Dict(doc_word_forms, initial_entries)
         cd = Dict(doc_char_forms, initial_entries)
-        bpd = Dict(doc_word_biposes, ["NULL", "UNK", "B_ROOT", "B_BOS", "B_EOS"])
+        bpd = Dict(doc_word_biposes, ["NULL", "UNK", "B_ROOT", "B_BOS", "B_EOS", "B_DUMMY"])
         td = Dict(doc_pos, initial_entries)
         tsd = Dict(doc_pos_sub, initial_entries)
         wif = Dict(doc_word_inflection_forms, initial_entries)
@@ -330,67 +334,157 @@ class DataFrameKtc(DataFrame):
                 tmp_word.append(wd.x2i["BOS"])
                 tmp_char.append(cd.x2i["BOS"])
                 tmp_word_bipos.append(bpd.x2i["B_BOS"])
-                tmp_chunk_bi.append(0)
+                # tmp_chunk_bi.append(0)
                 tmp_pos.append(td.x2i["BOS"])
                 tmp_bi.append(0)
                 tmp_pos_sub.append(tsd.x2i["BOS"])
                 tmp_wif.append(wifd.x2i["BOS"])
                 tmp_wit.append(witd.x2i["BOS"])
 
+            if config.root:
+                tmp_word.append(wd.x2i["ROOT"])
+                tmp_char.append(cd.x2i["ROOT"])
+                tmp_word_bipos.append(bpd.x2i["B_ROOT"])
+                tmp_chunk_bi.append(0)
+                tmp_pos.append(td.x2i["ROOT"])
+                tmp_bi.append(0)
+                tmp_pos_sub.append(tsd.x2i["ROOT"])
+                tmp_wif.append(wifd.x2i["ROOT"])
+                tmp_wit.append(witd.x2i["ROOT"])
+                # tmp_chunk_dep.append(0)
+            if config.insert_dummy and config.root:
+                tmp_word.append(wd.x2i["DUMMY"])
+                tmp_char.append(cd.x2i["DUMMY"])
+                tmp_word_bipos.append(bpd.x2i["B_DUMMY"])
+                tmp_chunk_bi.append(1)
+                tmp_pos.append(td.x2i["DUMMY"])
+                tmp_bi.append(0)
+                tmp_pos_sub.append(tsd.x2i["DUMMY"])
+                tmp_wif.append(wifd.x2i["DUMMY"])
+                tmp_wit.append(witd.x2i["DUMMY"])
 
-            tmp_word.append(wd.x2i["ROOT"])
-            tmp_char.append(cd.x2i["ROOT"])
-            tmp_word_bipos.append(bpd.x2i["B_ROOT"])
-            tmp_chunk_bi.append(0)
-            tmp_pos.append(td.x2i["ROOT"])
-            tmp_bi.append(0)
-            tmp_pos_sub.append(tsd.x2i["ROOT"])
-            tmp_wif.append(wifd.x2i["ROOT"])
-            tmp_wit.append(witd.x2i["ROOT"])
-            # tmp_chunk_dep.append(0)
+            contains_func = False
+            func_words_pos = ["助", "判", "句", "読"]
 
-            for wf in sent.word_forms:
-                tmp_word.append(wd.x2i[wf])
-            for cf in sent.char_forms:
-                tmp_char.append(cd.x2i[cf])
-            for p in sent.pos:
-                tmp_pos.append(td.x2i[p])
-            for bp in sent.word_biposes:
-                tmp_word_bipos.append(bpd.x2i[bp])
-                # tmp_pos.append(td.x2i[bp[2:]])
-                tmp_bi.append(0 if bp[0] == 'B' else 1)
-            for cbi in sent.chunk_bis:
-                tmp_chunk_bi.append(0 if cbi == 'B' else 1)
+            chunk_bi_word = [0 if cbi == 'B' else 1 for cbi in sent.chunk_bis]
+            # chunk_bi_word = []
+            # for wbipos, chbi in zip(sent.word_biposes, sent.chunk_bis):
+            #     if wbipos[0] == 'B':
+            #         if chbi == 'B':
+            #             chunk_bi_word.append(0)
+            #         else:
+            #             chunk_bi_word.append(1)
+
+            if config.insert_dummy:
+                for pidx in range(len(sent.pos)):
+                    if pidx == len(sent.pos) - 1:
+                        # tmp_pos.append(td.x2i[sent.pos[pidx]])
+                        # tmp_word.append(wd.x2i[sent.word_forms[pidx]])
+                        tmp_pos.append(td.x2i[sent.pos[pidx]])
+                        tmp_word.append(wd.x2i[sent.word_forms[pidx]])
+                        for w in sent.word_forms[pidx]:
+                            for c in w:
+                                tmp_char.append(cd.x2i[c])
+                        BI = 'B_'
+                        for bpidx in range(len(sent.word_forms[pidx])):
+                            tmp_word_bipos.append(bpd.x2i[BI + sent.pos[pidx]])
+                            tmp_bi.append(0 if BI[0] == 'B' else 1)
+                            BI = 'I_'
+
+                        tmp_pos_sub.append(tsd.x2i[sent.pos_sub[pidx]])
+                        tmp_wif.append(wifd.x2i[sent.word_inflection_forms[pidx]])
+                        tmp_wit.append(witd.x2i[sent.word_inflection_types[pidx]])
+
+                        tmp_chunk_bi.append(0 if sent.chunk_bis[pidx] == 'B' else 1)
+                        break
+
+
+                    tmp_pos.append(td.x2i[sent.pos[pidx]])
+                    tmp_word.append(wd.x2i[sent.word_forms[pidx]])
+                    for w in sent.word_forms[pidx]:
+                        for c in w:
+                            tmp_char.append(cd.x2i[c])
+
+                    tmp_chunk_bi.append(0 if sent.chunk_bis[pidx] == 'B' else 1)
+
+                    BI = 'B_'
+                    for bpidx in range(len(sent.word_forms[pidx])):
+                        tmp_word_bipos.append(bpd.x2i[BI + sent.pos[pidx]])
+                        tmp_bi.append(0 if BI[0] == 'B' else 1)
+                        BI = 'I_'
+
+                    tmp_pos_sub.append(tsd.x2i[sent.pos_sub[pidx]])
+                    tmp_wif.append(wifd.x2i[sent.word_inflection_forms[pidx]])
+                    tmp_wit.append(witd.x2i[sent.word_inflection_types[pidx]])
+
+                    if (sent.pos[pidx][0] in func_words_pos \
+                            or sent.pos_sub[pidx][0] in func_words_pos):
+                        contains_func = True
+                    if chunk_bi_word[pidx + 1] == 0:
+                        if not contains_func:
+                            tmp_pos.append(td.x2i["DUMMY"])
+                            tmp_word.append(wd.x2i["DUMMY"])
+                            tmp_pos_sub.append(tsd.x2i["DUMMY"])
+                            tmp_wif.append(wifd.x2i["DUMMY"])
+                            tmp_wit.append(witd.x2i["DUMMY"])
+                            tmp_char.append(cd.x2i["DUMMY"])
+                            tmp_word_bipos.append(bpd.x2i["B_DUMMY"])
+                            tmp_bi.append(0)
+                            tmp_chunk_bi.append(1)
+
+                        contains_func = False
+
+
+
+            else:
+                for wf in sent.word_forms:
+                    tmp_word.append(wd.x2i[wf])
+                for cf in sent.char_forms:
+                    tmp_char.append(cd.x2i[cf])
+                for bp in sent.word_biposes:
+                    tmp_word_bipos.append(bpd.x2i[bp])
+                    # tmp_pos.append(td.x2i[bp[2:]])
+                    tmp_bi.append(0 if bp[0] == 'B' else 1)
+
+                for cbi in sent.chunk_bis:
+                    tmp_chunk_bi.append(0 if cbi == 'B' else 1)
+                for p in sent.pos:
+                    tmp_pos.append(td.x2i[p])
+
+                for ps in sent.pos_sub:
+                    tmp_pos_sub.append(tsd.x2i[ps])
+                for wif in sent.word_inflection_forms:
+                    tmp_wif.append(wifd.x2i[wif])
+                for wit in sent.word_inflection_types:
+                    tmp_wit.append(witd.x2i[wit])
+
             for ch in sent.chunks:
                 tmp_chunk_dep.append(ch.head)
-            for ps in sent.pos_sub:
-                tmp_pos_sub.append(tsd.x2i[ps])
-            for wif in sent.word_inflection_forms:
-                tmp_wif.append(wifd.x2i[wif])
-            for wit in sent.word_inflection_types:
-                tmp_wit.append(witd.x2i[wit])
+
+            if config.BOS_EOS:
+                tmp_word.append(wd.x2i["EOS"])
+                tmp_char.append(cd.x2i["EOS"])
+                tmp_word_bipos.append(bpd.x2i["B_EOS"])
+                # tmp_chunk_bi.append(0)
+                tmp_pos.append(td.x2i["EOS"])
+                tmp_bi.append(0)
+                tmp_pos_sub.append(tsd.x2i["EOS"])
+                tmp_wif.append(wifd.x2i["EOS"])
+                tmp_wit.append(witd.x2i["EOS"])
 
             word_seqs.append(tmp_word)
             char_seqs.append(tmp_char)
             word_bipos_seqs.append(tmp_word_bipos)
             chunk_bi_seqs.append(tmp_chunk_bi)
+            # chunk_bi_seqs.append(chunk_bi_word)
+
+            # chunk_deps.append([0] + tmp_chunk_dep)
             chunk_deps.append(tmp_chunk_dep)
             pos_seqs.append(tmp_pos)
             bi_seqs.append(tmp_bi)
             pos_sub_seqs.append(tmp_pos_sub)
             word_inflection_form_seqs.append(tmp_wif)
             word_inflection_types_seqs.append(tmp_wit)
-
-            if config.BOS_EOS:
-                tmp_word.append(wd.x2i["EOS"])
-                tmp_char.append(cd.x2i["EOS"])
-                tmp_word_bipos.append(bpd.x2i["B_EOS"])
-                tmp_chunk_bi.append(0)
-                tmp_pos.append(td.x2i["EOS"])
-                tmp_bi.append(0)
-                tmp_pos_sub.append(tsd.x2i["EOS"])
-                tmp_wif.append(wifd.x2i["EOS"])
-                tmp_wit.append(witd.x2i["EOS"])
 
             # if config.BOS_EOS:
             #     # tmp_word.append(wd.x2i["EOS"])

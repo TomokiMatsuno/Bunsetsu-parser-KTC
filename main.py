@@ -303,6 +303,7 @@ params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, (INPUT_DIM // 10) *
 params["lp_wif"] = pc.add_lookup_parameters((WIF_SIZE + 1, (INPUT_DIM // 10) * 5))
 params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, (INPUT_DIM // 10) * 5))
 params["lp_rel"] = pc.add_lookup_parameters((len(rd), REL_DIM))
+params["root_emb"] = pc.add_lookup_parameters((1, bunsetsu_HIDDEN_DIM * 2))
 
 params["lp_func"] = pc.add_lookup_parameters((2, word_HIDDEN_DIM // (2 - wemb_lstm)))
 params["lp_cont"] = pc.add_lookup_parameters((2, word_HIDDEN_DIM // (2 - wemb_lstm)))
@@ -401,6 +402,7 @@ def dep_bunsetsu(bembs, pdrop):
     # head_MLP_bias = dy.dropout(dy.parameter(params["head_MLP_bias"]), pdrop_lstm)
     #
     # R_bunsetsu_biaffine = dy.dropout(dy.parameter(params["R_bunsetsu_biaffine"]), pdrop_lstm)
+    root_emb = params["root_emb"]
 
     dep_MLP = dy.parameter(params["dep_MLP"])
     dep_MLP_bias = dy.parameter(params["dep_MLP_bias"])
@@ -410,6 +412,8 @@ def dep_bunsetsu(bembs, pdrop):
     R_bunsetsu_biaffine = dy.parameter(params["R_bunsetsu_biaffine"])
 
     input_size = bembs[0].dim()[0][0]
+
+    bembs = [root_emb[0]] + bembs
 
     slen_x = slen_y = len(bembs)
 
@@ -454,11 +458,26 @@ def dep_bunsetsu(bembs, pdrop):
     return arc_loss, arc_preds, arc_preds_not_argmax
 
 
-def ranges(bi_seq):
-    ret = [(0, 1)]
-    start = 1
+# def ranges(bi_seq):
+#     ret = [(0, 1)]
+#     start = 1
+#
+#     for i in range(2, len(bi_seq)):
+#         if bi_seq[i] == 0:
+#             end = i
+#             ret.append((start, end))
+#             start = i
+#
+#     ret.append((start, len(bi_seq)))
+#
+#     return ret
 
-    for i in range(2, len(bi_seq)):
+
+def ranges(bi_seq):
+    ret = []
+    start = 0
+
+    for i in range(1, len(bi_seq)):
         if bi_seq[i] == 0:
             end = i
             ret.append((start, end))
@@ -643,10 +662,10 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position, pdrop):
     bembs_l2r = []
     bembs_r2l = []
 
-    for br, aux_idx in zip(bunsetsu_ranges[1: -1], aux_position[1: -1]):
-        start = br[0] - 1
+    for br, aux_idx in zip(bunsetsu_ranges, aux_position):
+        start = br[0]
         # start = br[0]
-        end = br[1] - 1
+        end = br[1]
 
         if not cont_aux_separated:
             ret.append(dy.concatenate([dy.dropout(leaky_relu(l2r_outs[end] - l2r_outs[start]), pdrop),
@@ -767,17 +786,17 @@ def word_bi(bi_w_seq, bi_b_seq):
     return ret
 
 
-def aux_position(bunsetsu_ranges, pos_seq):
+def aux_position(bunsetsu_ranges, pos_seq, pos_sub_seq):
     ret = []
 
     for br in bunsetsu_ranges:
         ret.append(-1)
         for widx in range(br[1] - br[0]):
-            ch1 = (td.i2x[pos_seq[br[0] + widx]])[0]
-            ch2 = (td.i2x[pos_seq[br[0] + widx]])[-1]
+            ch1 = (td.i2x[pos_seq[1:][br[0] + widx]])[0]
+            ch2 = (tsd.i2x[pos_sub_seq[1:][br[0] + widx]])[-1]
 
-            if ch1 == '助' or ch1 == '判' or ch2 == '点':
-                ret[-1] = widx
+            if ch1 == '助' or ch1 == '判' or ch1 == 'D' or ch2 == '点':
+                ret[-1] = widx + 1
                 break
 
     return ret
@@ -842,7 +861,8 @@ def train(char_seqs,
                 continue
 
             # bi_w_seq = [0 if (bpd.i2x[b])[0] == 'B' else 1 for b in bipos_seqs[idx]]
-            bi_w_seq = word_bi(word_bi_seqs[idx], chunk_bi_seqs[idx])
+            # bi_w_seq = word_bi(word_bi_seqs[idx], chunk_bi_seqs[idx])
+            bi_w_seq = chunk_bi_seqs[idx]
 
             word_ranges = ranges(word_bi_seqs[idx])
             # word_pos_seqs = word_pos(train_pos_seqs[idx], word_ranges)
@@ -866,7 +886,7 @@ def train(char_seqs,
                 losses_bunsetsu.append(loss_bi_bunsetsu)
 
             bunsetsu_ranges = ranges(bi_w_seq)
-            aux_positions = aux_position(bunsetsu_ranges, pos_seqs[idx])
+            aux_positions = aux_position(bunsetsu_ranges, pos_seqs[idx], pos_sub_seqs[idx])
 
             if wemb_lstm:
                 # bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_positions, pdrop_lstm)
@@ -960,8 +980,8 @@ def dev(char_seqs,
             continue
         idx = i
 
-        bi_w_seq = word_bi(word_bi_seqs[idx], chunk_bi_seqs[idx])
-
+        # bi_w_seq = word_bi(word_bi_seqs[idx], chunk_bi_seqs[idx])
+        bi_w_seq = chunk_bi_seqs[idx]
         num_tot += len(char_seqs[i])
 
         word_ranges = ranges(word_bi_seqs[i])
@@ -1009,7 +1029,7 @@ def dev(char_seqs,
                 chunks_excluded += np.sum(np.equal(dev_chunk_deps[i], fc)) + remains[fc]
                 remains = [r * (1 - d) for r, d in zip(remains, np.equal(dev_chunk_deps[i], fc))]
                 remains[fc] = False
-        aux_positions = aux_position(gold_bunsetsu_ranges, word_pos_seq)
+        aux_positions = aux_position(gold_bunsetsu_ranges, word_pos_seq, pos_sub_seqs[i])
 
         if wemb_lstm:
             # bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_positions, pdrop_lstm)
