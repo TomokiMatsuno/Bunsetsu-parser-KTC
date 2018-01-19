@@ -88,7 +88,7 @@ elif STANDARD_SPLIT:
 elif MINI_SET:
     split_name = "_MINISET"
 
-save_file = save_file + split_name
+save_file = save_file_directory + save_file + split_name
 
 # if cont_aux_separated:
 #     save_file = save_file + "_cont_aux_separated"
@@ -121,32 +121,6 @@ save_file = save_file + split_name
 #     save_file = save_file + "_wift"
 #
 # save_file = save_file + "_iterSize" + str(num_sent_in_iter)
-
-
-fidx = 0
-save_file_valify = save_file
-
-while os.path.exists(save_file_valify):
-    save_file_valify = save_file + str(fidx)
-    fidx += 1
-
-save_file = save_file_valify
-
-directory = save_file + "/"
-if not os.path.exists(directory):
-    os.makedirs(directory)
-
-
-load_file = save_file
-
-detail_file = directory + "detail.txt"
-result_file = directory + "result.txt"
-save_file = directory + "parameter"
-
-python_codes = glob.glob('./*.py')
-for pycode in python_codes:
-    shutil.copy2(pycode, directory)
-
 
 
 
@@ -1189,6 +1163,28 @@ for e in range(epoc):
 
     plot_loss(plt, dev_loss, prev_epoc, 2, dev_loss_xlim, dev_loss_ylim, dev_loss_ylim_lower)
     plot_loss(plt, acc, prev_epoc, 3, accuracy_xlim, accuracy_ylim, accuracy_ylim_lower)
+
+    if e == 0:
+        fidx = 0
+        save_file_valify = save_file
+
+        while os.path.exists(save_file_valify):
+            save_file_valify = save_file + str(fidx)
+            fidx += 1
+
+        save_file = save_file_valify
+
+        directory = save_file + "/"
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        detail_file = directory + "detail.txt"
+        result_file = directory + "result.txt"
+        save_file = directory + "parameter"
+
+        python_codes = glob.glob('./*.py')
+        for pycode in python_codes:
+            shutil.copy2(pycode, directory)
 
     with open(detail_file, mode='w', encoding='utf-8') as f:
         f.write("train_loss" + '\t')
