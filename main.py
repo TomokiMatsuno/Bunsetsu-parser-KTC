@@ -54,9 +54,14 @@ if STANDARD_SPLIT:
     files = glob.glob(path2KTC + 'syn/95010[1-9].*')
     files.extend(glob.glob(path2KTC + 'syn/95011[0-1].*'))
     files.extend(glob.glob(path2KTC + 'syn/950[1-8]ED.*'))
-    files.extend(glob.glob(path2KTC + 'syn/95011[4-7].*'))
-    files.extend(glob.glob(path2KTC + 'syn/951[0-2]ED.*'))
-    train_dev_boundary = -7
+    if TEST:
+        files.extend(glob.glob(path2KTC + 'syn/95011[4-7].*'))
+        files.extend(glob.glob(path2KTC + 'syn/951[0-2]ED.*'))
+        train_dev_boundary = -7
+    else:
+        files.extend(glob.glob(path2KTC + 'syn/95011[2-3].*'))
+        files.extend(glob.glob(path2KTC + 'syn/9509ED.*'))
+        train_dev_boundary = -3
 
 if JOS:
     files = glob.glob(path2KTC + 'just-one-sentence.txt')
@@ -1115,6 +1120,10 @@ if LOAD:
 
 prev_epoc = 0
 
+detail_file = "detail.txt"
+result_file = "result.txt"
+save_file = "parameter"
+
 for e in range(epoc):
 
     if e * train_iter >= change_train_iter and train_iter != 1:
@@ -1123,11 +1132,6 @@ for e in range(epoc):
 
     print("epoc: ", prev_epoc)
     prev_epoc += train_iter
-
-    if output_result:
-        with open(result_file, mode='a', encoding='utf-8') as f:
-            f.write("time: " + str(prev) + '\n')
-            f.write("epoc: " + str(prev_epoc) + '\n')
 
     TRAIN = True
     global pdrop
@@ -1185,6 +1189,12 @@ for e in range(epoc):
         python_codes = glob.glob('./*.py')
         for pycode in python_codes:
             shutil.copy2(pycode, directory)
+
+    if output_result:
+        with open(result_file, mode='a', encoding='utf-8') as f:
+            f.write("time: " + str(prev) + '\n')
+            f.write("epoc: " + str(prev_epoc) + '\n')
+
 
     with open(detail_file, mode='w', encoding='utf-8') as f:
         f.write("train_loss" + '\t')
