@@ -916,10 +916,10 @@ def train(char_seqs,
             arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs, pdrop_lstm)
 
             if show_acc:
-                num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, train_chunk_deps[idx]))
+                num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds[:-1], train_chunk_deps[idx][:-1]))
                 num_tot_cor_bunsetsu_dep_not_argmax += np.sum(np.equal(arc_preds_not_argmax[1:], train_chunk_deps[idx]))
 
-            num_tot_bunsetsu_dep += len(bembs) - 1
+            num_tot_bunsetsu_dep += len(bembs) - config.root - 1
 
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
 
@@ -1080,13 +1080,13 @@ def dev(char_seqs,
 
         total_loss += dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, dev_chunk_deps[i])).value()
 
-        num_tot_bunsetsu_dep += len(bembs) - 1
+        num_tot_bunsetsu_dep += len(bembs) - config.root - 1
 
         if len(arc_preds) != len(dev_chunk_deps[i]):
             failed_chunking += 1
             continue
 
-        num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds, dev_chunk_deps[i]))
+        num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds[:-1], dev_chunk_deps[i][:-1]))
         if chunker and eval_chunk:
             num_tot_cor_bunsetsu_dep += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds, dev_chunk_deps[i]))])
             num_tot_cor_bunsetsu_dep_not_argmax += np.sum([r * d for r, d in zip(remains, np.equal(arc_preds_not_argmax[1:], dev_chunk_deps[i]))])
