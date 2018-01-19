@@ -1224,7 +1224,7 @@ for e in range(epoc):
     print("time: ", time.time() - prev)
     prev = time.time()
 
-    if SAVE and not TEST and update:
+    if SAVE and not TEST:
         pc.save(save_file)
         print("saved into: ", save_file)
 
