@@ -240,14 +240,9 @@ if not orthonormal:
         l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
         r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
     else:
-        l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
-        r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc, layer_norm)
+        l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc, layer_norm)
+        r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc, layer_norm)
 
-    l2rlstm_cont = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc, layer_norm)
-    r2llstm_cont = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc, layer_norm)
-
-    l2rlstm_func = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc, layer_norm)
-    r2llstm_func = dy.VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc, layer_norm)
 else:
     l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc)
     r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc)
@@ -262,15 +257,8 @@ else:
         l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc)
         r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc)
     else:
-        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * (1 + cont_aux_separated), bunsetsu_HIDDEN_DIM, pc)
-
-    if False and cont_aux_separated:
-        l2rlstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_cont = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
-
-        l2rlstm_func = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_func = orthonormal_VanillaLSTMBuilder(LAYERS_contfunc, word_HIDDEN_DIM * 2 // (2 - wemb_lstm), bunsetsu_HIDDEN_DIM, pc)
+        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc)
+        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc)
 
 
 params = {}
@@ -296,11 +284,11 @@ params["bias_bi_b"] = pc.add_parameters((2))
 # params["func_MLP"] = pc.add_parameters((word_HIDDEN_DIM * (1 + cont_aux_separated) // (2 - wemb_lstm), word_HIDDEN_DIM * (1 + cont_aux_separated) // (2 - wemb_lstm)))
 # params["func_MLP_bias"] = pc.add_parameters((word_HIDDEN_DIM * (1 + cont_aux_separated) // (2 - wemb_lstm)))
 
-params["cont_MLP"] = pc.add_parameters((word_HIDDEN_DIM, word_HIDDEN_DIM * (1 + cont_aux_separated) // (2 - wemb_lstm)))
-params["cont_MLP_bias"] = pc.add_parameters((word_HIDDEN_DIM))
+params["cont_MLP"] = pc.add_parameters((word_HIDDEN_DIM // (1 + cont_aux_separated), word_HIDDEN_DIM * (1 + cont_aux_separated) // (2 - wemb_lstm)))
+params["cont_MLP_bias"] = pc.add_parameters((word_HIDDEN_DIM // (1 + cont_aux_separated)))
 
-params["func_MLP"] = pc.add_parameters((word_HIDDEN_DIM, word_HIDDEN_DIM * (1 + cont_aux_separated) // (2 - wemb_lstm)))
-params["func_MLP_bias"] = pc.add_parameters((word_HIDDEN_DIM))
+params["func_MLP"] = pc.add_parameters((word_HIDDEN_DIM // (1 + cont_aux_separated), word_HIDDEN_DIM * (1 + cont_aux_separated) // (2 - wemb_lstm)))
+params["func_MLP_bias"] = pc.add_parameters((word_HIDDEN_DIM // (1 + cont_aux_separated)))
 
 # params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * (1 + cont_aux_separated) // (1 + divide_embd)))
 params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * 2 + REL_DIM * rel_embd))
@@ -709,16 +697,7 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position, pdrop):
             func_seq.append(func_embd)
 
     if cont_aux_separated:
-        if False and not divide_embd:
-            cont_seq, _, _ = inputs2lstmouts(l2rlstm_cont, r2llstm_cont, cont_seq, pdrop)
-            func_seq, _, _ = inputs2lstmouts(l2rlstm_func, r2llstm_func, func_seq, pdrop)
-
-        # ret = [dy.concatenate([cont_seq[sidx], func_seq[sidx]]) for sidx in range(len(cont_seq))]
-        # ret = [dy.concatenate([dy.dropout(cont_seq[sidx], pdrop), dy.dropout(func_seq[sidx], pdrop)]) for sidx in range(len(cont_seq))]
-        ret = [dy.concatenate([dy.dropout(leaky_relu(cont_seq[sidx]), pdrop), dy.dropout(leaky_relu(func_seq[sidx]), pdrop)]) for sidx in range(len(cont_seq))]
-
-    # if rel_embd:
-    #     ret = [dy.concatenate([r, rel_embds(r, pdrop)]) for r in ret]
+        ret = [dy.concatenate([cont_seq[sidx], func_seq[sidx]]) for sidx in range(len(cont_seq))]
 
     return ret, bembs_l2r, bembs_r2l
 
@@ -1114,7 +1093,7 @@ def dev(char_seqs,
 
 prev = time.time()
 
-if LOAD:
+if LOAD and not TEST:
     pc.populate(load_file)
     print("loaded from: ", load_file)
 
@@ -1122,9 +1101,13 @@ prev_epoc = 0
 
 detail_file = "detail.txt"
 result_file = "result.txt"
-save_file = "parameter"
 
 for e in range(epoc):
+
+    if LOAD:
+        pc.populate(load_file + str(param_id))
+        print("loaded from: ", load_file + str(param_id))
+        param_id += 1
 
     if e * train_iter >= change_train_iter and train_iter != 1:
         train_iter = 1
@@ -1142,10 +1125,10 @@ for e in range(epoc):
     if not TEST:
         train(train_char_seqs, train_pos_seqs, train_pos_sub_seqs, train_wif_seqs, train_wit_seqs, train_word_bi_seqs, train_chunk_bi_seqs)
     # plot_loss(plt, train_loss, prev_epoc, "train_loss.png")
-    if train_loss_ylim <= train_loss[-1]:
-        train_loss_ylim = train_loss[-1] + 0.1
+        if train_loss_ylim <= train_loss[-1]:
+            train_loss_ylim = train_loss[-1] + 0.1
 
-    plot_loss(plt, train_loss, prev_epoc, 1, train_loss_xlim, train_loss_ylim, 0)
+        plot_loss(plt, train_loss, prev_epoc, 1, train_loss_xlim, train_loss_ylim, 0)
 
     print("time: ", time.time() - prev)
     prev = time.time()
@@ -1168,7 +1151,7 @@ for e in range(epoc):
     plot_loss(plt, dev_loss, prev_epoc, 2, dev_loss_xlim, dev_loss_ylim, dev_loss_ylim_lower)
     plot_loss(plt, acc, prev_epoc, 3, accuracy_xlim, accuracy_ylim, accuracy_ylim_lower)
 
-    if e == 0:
+    if e == 0 and not TEST:
         fidx = 0
         save_file_valify = save_file
 
@@ -1178,7 +1161,7 @@ for e in range(epoc):
 
         save_file = save_file_valify
 
-        directory = save_file + "/"
+        directory = save_file_directory + save_file + "/"
         if not os.path.exists(directory):
             os.makedirs(directory)
 
@@ -1215,7 +1198,8 @@ for e in range(epoc):
     # plt.subplot(224)
     # plt.text(0, 0, str(best_acc))
     # plt.text(0, 1, str(least_loss))
-    plt.savefig(directory + "image.png")
+    if not TEST:
+        plt.savefig(directory + "image.png")
 
     global early_stop_count
     if not update:
@@ -1224,9 +1208,9 @@ for e in range(epoc):
     print("time: ", time.time() - prev)
     prev = time.time()
 
-    if SAVE and not TEST and update:
-        pc.save(save_file)
-        print("saved into: ", save_file)
+    if SAVE and not TEST:
+        pc.save(save_file + str(early_stop_count))
+        print("saved into: ", save_file + str(early_stop_count))
 
     if early_stop_count > early_stop:
         print("best_acc: ", best_acc, end='\t')
