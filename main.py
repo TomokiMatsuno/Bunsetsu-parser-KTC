@@ -668,6 +668,7 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_position, pdrop):
 
             ret.append(dy.concatenate([cont_embd, func_embd]))
 
+            
             cont_seq.append(cont_embd)
             func_seq.append(func_embd)
 
