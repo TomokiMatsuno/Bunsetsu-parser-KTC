@@ -1,7 +1,7 @@
 import codecs
 import re
 import config
-
+from collections import Counter
 
 def make_line_chunks(lines, trigger, end_marker=None):
     lines_idx = 0
@@ -142,6 +142,11 @@ class Sent:
 
 class Dict:
     def __init__(self, doc, initial_entries=None):
+        seq = []
+        for d in doc:
+            seq.extend(d)
+
+        self.cnt = Counter(seq)
         self.i2x = {}
         self.x2i = {}
         self.appeared_x2i = {}
@@ -175,7 +180,7 @@ class Dict:
 
     def add_entry(self, ent):
         if ent not in self.x2i:
-            if not self.freezed:
+            if self.cnt[ent] > config.min_occur_count or not self.freezed:
                 self.i2x[len(self.i2x)] = ent
                 self.x2i[ent] = len(self.x2i)
             else:
