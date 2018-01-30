@@ -10,6 +10,7 @@ from config import *
 import config
 from utils import *
 import getfiles
+import get_pret_embs
 
 from tarjan import *
 import glob
@@ -118,6 +119,25 @@ for file in files[train_dev_boundary:]:
     lines = df.file2lines(df, file, ' ', encoding)
     dev_sents.extend(df.lines2sents(df, lines))
 
+train_vocab = set()
+for sent in train_sents:
+    for w in sent.word_forms:
+        train_vocab.add(w)
+
+dev_vocab = set()
+for sent in dev_sents:
+    for w in sent.word_forms:
+        dev_vocab.add(w)
+
+pret_embs = get_pret_embs.get_pret_embs()
+pret_vocab = set(pret_embs.index2word)
+
+td_is = dev_vocab.intersection(train_vocab)
+tp_uni = train_vocab.union(pret_vocab)
+print(len(dev_vocab.difference(train_vocab)))
+print(len(dev_vocab.difference(tp_uni)))
+print(len(pret_vocab.intersection(train_vocab)))
+
 for sent in dev_sents:
     for w in sent.word_forms:
         wd.add_entry(w)
@@ -144,12 +164,6 @@ dev_word_seqs, dev_char_seqs, dev_word_bipos_seqs, \
 dev_chunk_bi_seqs, dev_chunk_deps, dev_pos_seqs, dev_word_bi_seqs, \
 dev_pos_sub_seqs, dev_wif_seqs, dev_wit_seqs \
     = df.sents2ids([wd, cd, bpd, td, tsd, wifd, witd], dev_sents)
-
-total_chunks = 0
-for dcd in dev_chunk_deps:
-    total_chunks += len(dcd)
-
-print(total_chunks)
 
 ###Neural Network
 # WORDS_SIZE = len(wd.appeared_i2x) + 1
@@ -221,6 +235,7 @@ params["lp_p"] = pc.add_lookup_parameters((POS_SIZE + 1, (INPUT_DIM // 10) * 5 *
 params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, (INPUT_DIM // 10) * 5 * (1 + use_wif_wit)), init=dy.ConstInitializer(0.))
 params["lp_wif"] = pc.add_lookup_parameters((WIF_SIZE + 1, (INPUT_DIM // 10) * 5), init=dy.ConstInitializer(0.))
 params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, (INPUT_DIM // 10) * 5), init=dy.ConstInitializer(0.))
+
 params["root_emb"] = pc.add_lookup_parameters((1, bunsetsu_HIDDEN_DIM * 2))
 
 params["R_bi_b"] = pc.add_parameters((2, word_HIDDEN_DIM * 2))
@@ -407,8 +422,19 @@ def embd_mask_generator(pdrop, slen):
 
 def char_embds(char_seq):
     lp_c = params["lp_c"]
+    pret_chars = []
 
-    cembs = [lp_c[char_seq[i]] for i in range(len(char_seq))]
+    if config.add_pret_embs:
+        for i in range(len(char_seq)):
+            c = cd.i2x[char_seq[i]]
+
+            if c in pret_embs:
+                pret_chars.append(dy.inputTensor(pret_embs[c]))
+            else:
+                pret_chars.append(dy.inputTensor(np.zeros(INPUT_DIM, dtype=np.float32)))
+        cembs = [lp_c[char_seq[i]] + pret_chars[i] for i in range(len(char_seq))]
+    else:
+        cembs = [lp_c[char_seq[i]] for i in range(len(char_seq))]
 
     return cembs
 
@@ -431,35 +457,22 @@ def word_embds(char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ranges):
 
         pos_lp = dy.concatenate([lp_p[pos_seq[idx]], lp_ps[pos_sub_seq[idx]]])
 
-        # rnd_word = rnd_pos = rnd_unk = 1
-        #
-        # if unk_dropout != 0 and TRAIN:
-        #     rnd_unk = np.random.randint(0, unk_dropout)
-        #
-        # if embd_dropout != 0 and TRAIN:
-        #     rnd_pos = np.random.randint(0, embd_dropout)
-        #     rnd_word = np.random.randint(0, embd_dropout)
+        if str in pret_embs and config.add_pret_embs:
+            pret_emb = dy.inputTensor(pret_embs[str])
+        else:
+            pret_emb = dy.inputTensor(np.zeros(INPUT_DIM, dtype=np.float32))
 
         if str in wd.x2i:
             if config.use_wif_wit:
-                word_form = dy.concatenate([lp_w[wd.x2i[str]], lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
+                word_form = dy.concatenate([lp_w[wd.x2i[str]] + pret_emb, lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
             else:
-                word_form = lp_w[wd.x2i[str]]
+                word_form = lp_w[wd.x2i[str]] + pret_emb
         else:
             if config.use_wif_wit:
-                word_form = dy.concatenate([lp_w[wd.x2i["UNK"]], lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
+                word_form = dy.concatenate([lp_w[wd.x2i["UNK"]] + pret_emb, lp_wif[wif_seq[idx]], lp_wit[wit_seq[idx]]])
             else:
-                word_form = lp_w[wd.x2i["UNK"]]
+                word_form = lp_w[wd.x2i["UNK"]] + pret_emb
 
-        # if rnd_pos == 0:
-        #     pos_lp = pos_lp - pos_lp
-        # if rnd_word == 0:
-        #     word_form = word_form - word_form
-        #
-        # if rnd_pos == 0:
-        #     word_form *= 2
-        # if rnd_word == 0:
-        #     pos_lp *= 2
         wembs_w.append(word_form)
         wembs_t.append(pos_lp)
 

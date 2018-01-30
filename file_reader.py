@@ -121,7 +121,10 @@ class Sent:
         self.make_chunks(lines)
         for ch in self.chunks:
             for word in ch.words:
-                self.word_forms.append(word.feats[0])
+                if word.feats[2] != '*' and config.dict_form:
+                    self.word_forms.append(word.feats[2])
+                else:
+                    self.word_forms.append(word.feats[0])
                 self.pos.append(word.feats[3])
                 self.pos_sub.append(word.feats[4])
                 self.word_inflection_forms.append(word.feats[5])
