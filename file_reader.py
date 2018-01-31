@@ -2,6 +2,8 @@ import codecs
 import re
 import config
 from collections import Counter
+# import MeCab
+# mecab = MeCab.Tagger("/opt/local/lib/mecab/dic/mecab-ipadic-neologd")
 
 def make_line_chunks(lines, trigger, end_marker=None):
     lines_idx = 0
@@ -117,23 +119,41 @@ class Sent:
         self.char_forms = []
         self.word_biposes = []
         self.chunk_bis = []
+        self.chunk_bi_char = []
+        text = ""
 
         self.make_chunks(lines)
         for ch in self.chunks:
             for word in ch.words:
+                num_char = len(word.feats[0])
+
                 if word.feats[2] != '*' and config.dict_form:
-                    self.word_forms.append(word.feats[2])
+                    self.word_forms.extend(word.feats[2])
                 else:
-                    self.word_forms.append(word.feats[0])
-                self.pos.append(word.feats[3])
-                self.pos_sub.append(word.feats[4])
-                self.word_inflection_forms.append(word.feats[5])
-                self.word_inflection_types.append(word.feats[6])
-                self.chunk_bis.append(word.chunk_bi)
+                    self.word_forms.extend(word.feats[0])
+                self.pos.extend([word.feats[3]] * (1 + (num_char - 1) * config.char_base))
+                self.pos_sub.extend([word.feats[4]] * (1 + (num_char - 1) * config.char_base))
+                self.word_inflection_forms.extend([word.feats[5]] * (1 + (num_char - 1) * config.char_base))
+                self.word_inflection_types.extend([word.feats[6]] * (1 + (num_char - 1) * config.char_base))
+                self.chunk_bis.extend(word.chunk_bi)
+                for ci in range(num_char):
+                    if word.chunk_bi == 'B' and ci == 0:
+                        self.chunk_bi_char.append(0)
+                    else:
+                        self.chunk_bi_char.append(1)
+
                 for char in word.chars:
-                    self.char_forms.append(char.form)
-                    self.word_biposes.append(char.word_bipos)
+                    self.char_forms.extend([char.form])
+                    text = text + char.form
+                    self.word_biposes.extend([char.word_bipos])
                     # self.chunk_bis.append(char.chunk_bi)
+
+        # if config.use_mecab:
+        #     tagged_text = mecab('')
+        #     node = mecab.parseToNode(text)
+
+
+
 
 
 
