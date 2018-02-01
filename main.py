@@ -189,13 +189,19 @@ pc = dy.ParameterCollection()
 if not use_annealing:
     trainer = dy.AdadeltaTrainer(pc)
 else:
-    trainer = dy.AdamTrainer(pc, config.learning_rate , config.beta_1, config.beta_2, config.epsilon)
+    # trainer = dy.AdamTrainer(pc, config.learning_rate , config.beta_1, config.beta_2, config.epsilon)
+    trainer = dy.SimpleSGDTrainer(pc, config.learning_rate)
+    trainer.set_clip_threshold(3.)
 
 global_step = 0
 
+# def update_parameters():
+#     if use_annealing:
+#         trainer.learning_rate = config.learning_rate * decay ** (global_step / config.decay_steps)
+#     trainer.update()
 def update_parameters():
     if use_annealing:
-        trainer.learning_rate = config.learning_rate * decay ** (global_step / config.decay_steps)
+        trainer.learning_rate = config.learning_rate / (1 + decay * (global_step - 1))
     trainer.update()
 
 
@@ -203,8 +209,8 @@ if not orthonormal:
     l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, config.INPUT_DIM * 1, config.char_HIDDEN_DIM, pc, layer_norm)
     r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, config.INPUT_DIM * 1, config.char_HIDDEN_DIM, pc, layer_norm)
 
-    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, config.char_HIDDEN_DIM * 2 + INPUT_DIM * 4, word_HIDDEN_DIM, pc, layer_norm)
-    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, config.char_HIDDEN_DIM * 2 + INPUT_DIM * 4, word_HIDDEN_DIM, pc, layer_norm)
+    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, config.char_HIDDEN_DIM + INPUT_DIM * 4, word_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, config.char_HIDDEN_DIM + INPUT_DIM * 4, word_HIDDEN_DIM, pc, layer_norm)
 
     if bembs_average_flag:
         l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
@@ -214,11 +220,11 @@ if not orthonormal:
         r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc, layer_norm)
 
 else:
-    l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc)
-    r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc)
+    l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, config.INPUT_DIM * 1, config.char_HIDDEN_DIM, pc)
+    r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, config.INPUT_DIM * 1, config.char_HIDDEN_DIM, pc)
 
-    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), word_HIDDEN_DIM, pc)
-    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), word_HIDDEN_DIM, pc)
+    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, config.char_HIDDEN_DIM + INPUT_DIM * 4, word_HIDDEN_DIM, pc)
+    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, config.char_HIDDEN_DIM + INPUT_DIM * 4, word_HIDDEN_DIM, pc)
 
     if bembs_average_flag:
         l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc)
@@ -251,7 +257,7 @@ params["cont_MLP_bias"] = pc.add_parameters((word_HIDDEN_DIM), init=dy.ConstInit
 params["func_MLP"] = pc.add_parameters((word_HIDDEN_DIM, word_HIDDEN_DIM // (2 - wemb_lstm) * 2))
 params["func_MLP_bias"] = pc.add_parameters((word_HIDDEN_DIM), init=dy.ConstInitializer(0.))
 
-if not TEST:
+if not TEST or orthonormal:
     W = orthonormal_initializer(MLP_HIDDEN_DIM, 2 * bunsetsu_HIDDEN_DIM)
     params["head_MLP"] = pc.parameters_from_numpy(W)
     params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
@@ -273,8 +279,8 @@ def inputs2lstmouts(l2rlstm, r2llstm, inputs, pdrop):
     s_l2r_0 = l2rlstm.initial_state()
     s_r2l_0 = r2llstm.initial_state()
 
-    l2rlstm.set_dropouts(pdrop, pdrop)
-    r2llstm.set_dropouts(pdrop, pdrop)
+    l2rlstm.set_dropouts(pdrop, .0)
+    r2llstm.set_dropouts(pdrop, .0)
 
     s_l2r = s_l2r_0
     s_r2l = s_r2l_0
@@ -292,7 +298,7 @@ def inputs2singlelstmouts(lstm, inputs, pdrop):
 
     s_0 = lstm.initial_state()
 
-    lstm.set_dropouts(pdrop, pdrop)
+    lstm.set_dropouts(pdrop, .0)
 
     s = s_0
 
@@ -387,6 +393,8 @@ def ranges(bi_seq):
 
 def segment_embds(l2r_outs, r2l_outs, ranges, offset=0, segment_concat=False):
     ret = []
+    l2rs = []
+    r2ls = []
     if offset == 0:
         st = 0
         en = len(ranges)
@@ -410,8 +418,10 @@ def segment_embds(l2r_outs, r2l_outs, ranges, offset=0, segment_concat=False):
             r2l = r2l_outs[start + 1] - r2l_outs[end + 1]
 
         ret.append(dy.concatenate([l2r, r2l]))
+        l2rs.append(l2r)
+        r2ls.append(r2l)
 
-    return ret
+    return ret, l2rs, r2ls
 
 def embd_mask_generator(pdrop, slen):
     if not TRAIN:
@@ -424,9 +434,11 @@ def embd_mask_generator(pdrop, slen):
     masks_t = [mask_t * scale for mask_t, scale in zip(masks_t, scales)]
     return masks_w, masks_t
 
-def char_embds(char_seq):
+def char_embds(char_seq, pdrop):
     lp_c = params["lp_c"]
     pret_chars = []
+    if not TRAIN:
+        pdrop = 0.0
 
     if config.add_pret_embs:
         for i in range(len(char_seq)):
@@ -436,21 +448,21 @@ def char_embds(char_seq):
                 pret_chars.append(dy.inputTensor(pret_embs[c]))
             else:
                 pret_chars.append(dy.inputTensor(np.zeros(INPUT_DIM, dtype=np.float32)))
-        cembs = [lp_c[char_seq[i]] + pret_chars[i] for i in range(len(char_seq))]
+        cembs = [dy.dropout(lp_c[char_seq[i]] + pret_chars[i], pdrop)for i in range(len(char_seq))]
     else:
-        cembs = [lp_c[char_seq[i]] for i in range(len(char_seq))]
+        cembs = [dy.dropout(lp_c[char_seq[i]], pdrop) for i in range(len(char_seq))]
 
     return cembs
 
 
-params["pred_pos"] = pc.add_parameters((POS_SIZE, char_HIDDEN_DIM*2))
-params["pred_pos_bias"] = pc.add_parameters(POS_SIZE)
-params["pred_possub"] = pc.add_parameters((POSSUB_SIZE, char_HIDDEN_DIM*2))
-params["pred_possub_bias"] = pc.add_parameters(POSSUB_SIZE)
-params["pred_wif"] = pc.add_parameters((WIF_SIZE, char_HIDDEN_DIM*2))
-params["pred_wif_bias"] = pc.add_parameters(WIF_SIZE)
-params["pred_wit"] = pc.add_parameters((WIT_SIZE, char_HIDDEN_DIM*2))
-params["pred_wit_bias"] = pc.add_parameters(WIT_SIZE)
+params["pred_pos"] = pc.add_parameters((POS_SIZE, char_HIDDEN_DIM*2), init=dy.ConstInitializer(0.))
+params["pred_pos_bias"] = pc.add_parameters(POS_SIZE, init=dy.ConstInitializer(0.))
+params["pred_possub"] = pc.add_parameters((POSSUB_SIZE, char_HIDDEN_DIM*2), init=dy.ConstInitializer(0.))
+params["pred_possub_bias"] = pc.add_parameters(POSSUB_SIZE, init=dy.ConstInitializer(0.))
+params["pred_wif"] = pc.add_parameters((WIF_SIZE, char_HIDDEN_DIM*2), init=dy.ConstInitializer(0.))
+params["pred_wif_bias"] = pc.add_parameters(WIF_SIZE, init=dy.ConstInitializer(0.))
+params["pred_wit"] = pc.add_parameters((WIT_SIZE, char_HIDDEN_DIM*2), init=dy.ConstInitializer(0.))
+params["pred_wit_bias"] = pc.add_parameters(WIT_SIZE, init=dy.ConstInitializer(0.))
 
 params["param_pos"] = pc.add_parameters((INPUT_DIM, POS_SIZE))
 params["param_possub"] = pc.add_parameters((INPUT_DIM, POSSUB_SIZE))
@@ -459,6 +471,34 @@ params["param_wit"] = pc.add_parameters((INPUT_DIM, WIT_SIZE))
 
 # probs = dy.softmax(R_bi_b * wembs[i] + bias_bi_b)
 # loss.append(-dy.log(dy.pick(probs, chunk_bi[i])))
+
+
+def params_regularization(param_pos_prev, param_possub_prev, param_wif_prev, param_wit_prev, lp_c_prev):
+    param_pos = dy.parameter(params["param_pos"])
+    param_possub = dy.parameter(params["param_possub"])
+    param_wif = dy.parameter(params["param_wif"])
+    param_wit = dy.parameter(params["param_wit"])
+    lp_c = dy.parameter(params["lp_c"])
+
+
+    # loss = dy.sum_elems(param_pos - dy.inputTensor(param_pos_prev)) + \
+    #        dy.sum_elems(param_possub - dy.inputTensor(param_possub_prev)) + \
+    #        dy.sum_elems(param_wif - dy.inputTensor(param_wif_prev)) + \
+    #        dy.sum_elems(param_wit - dy.inputTensor(param_wit_prev))
+
+    loss = dy.scalarInput(0)
+
+    if config.reg_feats:
+        loss += dy.squared_distance(param_pos, dy.inputTensor(param_pos_prev)) + \
+               dy.squared_distance(param_possub, dy.inputTensor(param_possub_prev)) + \
+               dy.squared_distance(param_wif, dy.inputTensor(param_wif_prev)) + \
+               dy.squared_distance(param_wit, dy.inputTensor(param_wit_prev))
+    if config.reg_lpc:
+        loss += dy.squared_distance(lp_c, dy.inputTensor(lp_c_prev))
+
+    return loss * config.params_delta
+
+
 
 
 def pred_feats(lstmouts, feats=None):
@@ -500,6 +540,11 @@ def pred_feats(lstmouts, feats=None):
         tmp_smx_wif = (dy.softmax(dy.affine_transform([pred_wif_bias, pred_wif, lstmouts[ci]])))
         tmp_smx_wit = (dy.softmax(dy.affine_transform([pred_wit_bias, pred_wit, lstmouts[ci]])))
 
+        # tmp_ssn_pos = (dy.softsign(dy.affine_transform([pred_pos_bias, pred_pos, lstmouts[ci]])))
+        # tmp_ssn_possub = (dy.softsign(dy.affine_transform([pred_possub_bias, pred_possub, lstmouts[ci]])))
+        # tmp_ssn_wif = (dy.softsign(dy.affine_transform([pred_wif_bias, pred_wif, lstmouts[ci]])))
+        # tmp_ssn_wit = (dy.softsign(dy.affine_transform([pred_wit_bias, pred_wit, lstmouts[ci]])))
+
         loss.append(-dy.log(dy.pick(tmp_smx_pos, feats[0][ci])))
         loss.append(-dy.log(dy.pick(tmp_smx_possub, feats[1][ci])))
         loss.append(-dy.log(dy.pick(tmp_smx_wif, feats[2][ci])))
@@ -510,33 +555,38 @@ def pred_feats(lstmouts, feats=None):
         emb_wif.append(param_wif * tmp_smx_wif)
         emb_wit.append(param_wit * tmp_smx_wit)
 
+        # emb_pos.append(param_pos * tmp_ssn_pos)
+        # emb_possub.append(param_possub * tmp_ssn_possub)
+        # emb_wif.append(param_wif * tmp_ssn_wif)
+        # emb_wit.append(param_wit * tmp_ssn_wit)
+
     return dy.esum(loss), emb_pos, emb_possub, emb_wif, emb_wit
 
-    if feats is not None:
-        loss = []
-        lstmouts = dy.concatenate_cols(lstmouts)
-
-        expr_pos = dy.affine_transform([pred_pos_bias, pred_pos, lstmouts])
-        expr_possub = dy.affine_transform([pred_possub_bias, pred_possub, lstmouts])
-        expr_wif = dy.affine_transform([pred_wif_bias, pred_wif, lstmouts])
-        expr_wit = dy.affine_transform([pred_wit_bias, pred_wit, lstmouts])
-
-        batched_pos = dy.reshape(expr_pos, (POS_SIZE, ), slen)
-        batched_possub = dy.reshape(expr_possub, (POSSUB_SIZE, ), slen)
-        batched_wif = dy.reshape(expr_wif, (WIF_SIZE, ), slen)
-        batched_wit = dy.reshape(expr_wit, (WIT_SIZE, ), slen)
-
-        loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_pos, feats[0])))
-        loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_possub, feats[1])))
-        loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wif, feats[2])))
-        loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wit, feats[3])))
-
-        return loss
-    else:
-        dy.softmax(batched_pos)
-        loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_possub, feats[1])))
-        loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wif, feats[2])))
-        loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wit, feats[3])))
+    # if feats is not None:
+    #     loss = []
+    #     lstmouts = dy.concatenate_cols(lstmouts)
+    #
+    #     expr_pos = dy.affine_transform([pred_pos_bias, pred_pos, lstmouts])
+    #     expr_possub = dy.affine_transform([pred_possub_bias, pred_possub, lstmouts])
+    #     expr_wif = dy.affine_transform([pred_wif_bias, pred_wif, lstmouts])
+    #     expr_wit = dy.affine_transform([pred_wit_bias, pred_wit, lstmouts])
+    #
+    #     batched_pos = dy.reshape(expr_pos, (POS_SIZE, ), slen)
+    #     batched_possub = dy.reshape(expr_possub, (POSSUB_SIZE, ), slen)
+    #     batched_wif = dy.reshape(expr_wif, (WIF_SIZE, ), slen)
+    #     batched_wit = dy.reshape(expr_wit, (WIT_SIZE, ), slen)
+    #
+    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_pos, feats[0])))
+    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_possub, feats[1])))
+    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wif, feats[2])))
+    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wit, feats[3])))
+    #
+    #     return loss
+    # else:
+    #     dy.softmax(batched_pos)
+    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_possub, feats[1])))
+    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wif, feats[2])))
+    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wit, feats[3])))
 
 
 
@@ -719,18 +769,31 @@ def train(char_seqs,
     losses_arcs = []
     prev = time.time()
 
+    # param_pos_prev = dy.parameter(params["param_pos"])
+    # param_possub_prev = dy.parameter(params["param_possub"])
+    # param_wif_prev = dy.parameter(params["param_wif"])
+    # param_wit_prev = dy.parameter(params["param_wit"])
+
+    param_pos_prev = dy.parameter(params["param_pos"]).npvalue()
+    param_possub_prev = dy.parameter(params["param_possub"]).npvalue()
+    param_wif_prev = dy.parameter(params["param_wif"]).npvalue()
+    param_wit_prev = dy.parameter(params["param_wit"]).npvalue()
+    lp_c_prev = params["lp_c"].expr().npvalue()
+
     for it in range(train_iter):
         num_tot_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep_not_argmax = 0
         tot_loss_in_iter = 0
+        tot_loss_feats = 0
         sent_ids = [sent_id for sent_id in range(len(char_seqs))]
         np.random.shuffle(sent_ids)
 
         for i in range(len(char_seqs) // divide_train):
-            if i % batch_size == 0:
+            if i % batch_dep == 0 and i % batch_pos == 0:
                 losses_bunsetsu = []
                 losses_arcs = []
+                losses_feats = []
 
                 dy.renew_cg()
 
@@ -744,14 +807,46 @@ def train(char_seqs,
 
             bunsetsu_ranges = ranges([0] + train_sents[idx].chunk_bi_char + [0])
 
-            cembs = char_embds(char_seqs[idx])
-            cembs, l2r_char, r2l_char = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop_cemb)
+            cembs = char_embds(char_seqs[idx], pdrop_cemb)
+
+            cembs_lstmouts, l2rs_char, r2ls_char = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop_lstm)
             loss_feats, embs_pos, embs_possub, embs_wif, embs_wit = \
-                pred_feats(cembs, [pos_seqs[idx], pos_sub_seqs[idx], wif_seqs[idx], wit_seqs[idx]])
-            cembs = [dy.concatenate([cemb, pos, possub, wif, wit])
-                     for cemb, pos, possub, wif, wit in zip(cembs, embs_pos, embs_possub, embs_wif, embs_wit)]
-            cembs, l2r_char, r2l_char = inputs2lstmouts(l2rlstm_word, r2llstm_word, cembs, pdrop_lstm)
-            bembs = segment_embds(l2r_char, r2l_char, bunsetsu_ranges, offset=1)
+                pred_feats(cembs_lstmouts, [pos_seqs[idx], pos_sub_seqs[idx], wif_seqs[idx], wit_seqs[idx]])
+            losses_feats.append(loss_feats)
+
+            if not config.share_cembs:
+                cembs = cembs_lstmouts
+
+            cembs_l2r = [dy.concatenate([l2r_char, pos, possub, wif, wit])
+                         for l2r_char, pos, possub, wif, wit in zip(l2rs_char, embs_pos, embs_possub, embs_wif, embs_wit)]
+            cembs_r2l = [dy.concatenate([r2l_char, pos, possub, wif, wit])
+                         for r2l_char, pos, possub, wif, wit in zip(r2ls_char, embs_pos, embs_possub, embs_wif, embs_wit)]
+
+            l2rs_char, r2ls_char = inputs2singlelstmouts(l2rlstm_word, cembs_l2r, pdrop_lstm), \
+                                   inputs2singlelstmouts(r2llstm_word, cembs_r2l, pdrop_lstm)
+
+            # cembs, l2rs_char, r2ls_char = inputs2lstmouts(l2rlstm_word, r2llstm_word, cembs, pdrop_lstm)
+            bembs, l2rs_bunsetsu, r2ls_bunsetsu = segment_embds(l2rs_char, r2ls_char, bunsetsu_ranges, offset=1)
+            bembs_l2r, bembs_r2l = inputs2singlelstmouts(l2rlstm_bunsetsu, l2rs_bunsetsu, pdrop_lstm), \
+                                   inputs2singlelstmouts(r2llstm_bunsetsu, r2ls_bunsetsu, pdrop_lstm)
+
+            bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
+
+            if i % batch_pos == 0 or i == len(char_seqs) - 1:
+                loss_feats_batch = dy.esum(losses_feats) + \
+                    params_regularization(
+                        param_pos_prev,
+                        param_possub_prev,
+                        param_wif_prev,
+                        param_wit_prev,
+                        lp_c_prev
+                    )
+                tot_loss_feats += loss_feats_batch.npvalue()
+                if i == len(char_seqs) - 1:
+                    print("feats loss", tot_loss_feats)
+                loss_feats_batch.backward()
+                update_parameters()
+                # print(trainer.get_clip_threshold())
 
             # bi_w_seq = chunk_bi_seqs[idx]
             #
@@ -809,10 +904,11 @@ def train(char_seqs,
 
             num_tot_bunsetsu_dep += len(bembs) - config.root - 1
 
-            losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])) + loss_feats)
+            # loss_feats += params_regularization(param_pos_prev, param_possub_prev, param_wif_prev, param_wit_prev)
 
-            global global_step
-            if (i % batch_size == 0 or i == len(train_sents) - 1) and i != 0:
+            losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
+
+            if (i % batch_dep == 0 or i == len(train_sents) - 1) and i != 0:
 
                 losses_arcs.extend(losses_bunsetsu)
 
@@ -821,7 +917,8 @@ def train(char_seqs,
 
                 sum_losses_arcs.backward()
                 update_parameters()
-                global_step += 1
+                # global global_step
+                # global_step += 1
                 tot_loss_in_iter += sum_losses_arcs_value
 
             if i % show_loss_every == 0 and i != 0:
@@ -830,10 +927,13 @@ def train(char_seqs,
                     print("dep accuracy not argmax: ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
         if show_time:
             print("time in this iter: ", time.time() - prev)
+        global global_step
+        global_step += 1
         prev = time.time()
         print(it, "\t[train] average loss:\t", tot_loss_in_iter / len(train_sents))
         train_loss_in_iter = tot_loss_in_iter / len(train_sents)
         train_loss.extend([train_loss_in_iter])
+
 
 
 def dev(char_seqs,
@@ -868,14 +968,38 @@ def dev(char_seqs,
 
         bunsetsu_ranges = ranges([0] + dev_sents[idx].chunk_bi_char + [0])
 
-        cembs = char_embds(char_seqs[idx])
-        cembs, l2r_char, r2l_char = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop_cemb)
+        cembs = char_embds(char_seqs[idx], pdrop_cemb)
+        cembs_lstmouts, l2rs_char, r2ls_char = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop_lstm)
         loss_feats, embs_pos, embs_possub, embs_wif, embs_wit = \
-            pred_feats(cembs, [pos_seqs[idx], pos_sub_seqs[idx], wif_seqs[idx], wit_seqs[idx]])
-        cembs = [dy.concatenate([cemb, pos, possub, wif, wit])
-                 for cemb, pos, possub, wif, wit in zip(cembs, embs_pos, embs_possub, embs_wif, embs_wit)]
-        cembs, l2r_char, r2l_char = inputs2lstmouts(l2rlstm_word, r2llstm_word, cembs, pdrop_lstm)
-        bembs = segment_embds(l2r_char, r2l_char, bunsetsu_ranges, offset=1)
+            pred_feats(cembs_lstmouts, [pos_seqs[idx], pos_sub_seqs[idx], wif_seqs[idx], wit_seqs[idx]])
+
+        if not config.share_cembs:
+            cembs = cembs_lstmouts
+
+        cembs_l2r = [dy.concatenate([l2r_char, pos, possub, wif, wit])
+                     for l2r_char, pos, possub, wif, wit in zip(l2rs_char, embs_pos, embs_possub, embs_wif, embs_wit)]
+        cembs_r2l = [dy.concatenate([r2l_char, pos, possub, wif, wit])
+                     for r2l_char, pos, possub, wif, wit in zip(r2ls_char, embs_pos, embs_possub, embs_wif, embs_wit)]
+
+        l2rs_char, r2ls_char = inputs2singlelstmouts(l2rlstm_word, cembs_l2r, pdrop_lstm), \
+                               inputs2singlelstmouts(r2llstm_word, cembs_r2l, pdrop_lstm)
+
+        # cembs_lstmouts, l2r_char, r2l_char = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop_lstm)
+        # loss_feats, embs_pos, embs_possub, embs_wif, embs_wit = \
+        #     pred_feats(cembs_lstmouts, [pos_seqs[idx], pos_sub_seqs[idx], wif_seqs[idx], wit_seqs[idx]])
+        #
+        # if not config.share_cembs:
+        #     cembs = cembs_lstmouts
+        #
+        # cembs = [dy.concatenate([cemb, pos, possub, wif, wit])
+        #          for cemb, pos, possub, wif, wit in zip(cembs, embs_pos, embs_possub, embs_wif, embs_wit)]
+        # cembs, l2r_char, r2l_char = inputs2lstmouts(l2rlstm_word, r2llstm_word, cembs, pdrop_lstm)
+        bembs, l2rs_bunsetsu, r2ls_bunsetsu = segment_embds(l2rs_char, r2ls_char, bunsetsu_ranges, offset=1)
+
+        bembs_l2r, bembs_r2l = inputs2singlelstmouts(l2rlstm_bunsetsu, l2rs_bunsetsu, pdrop_lstm), \
+                               inputs2singlelstmouts(r2llstm_bunsetsu, r2ls_bunsetsu, pdrop_lstm)
+
+        bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
         #
         # bi_w_seq = chunk_bi_seqs[idx]
         # num_tot += len(char_seqs[i])
