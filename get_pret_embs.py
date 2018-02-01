@@ -1,11 +1,12 @@
 import pandas as pd
 from gensim.models import word2vec
 from gensim.models.keyedvectors import KeyedVectors
+import paths
 
 def get_pret_embs():
     # path2javec = '/Users/tomoki/NLP_data/ja-vec-w2v-format.txt'
     path2javec = '/Users/tomoki/NLP_data/entity_vector/entity_vector.model.bin'
-    word_vectors = KeyedVectors.load_word2vec_format(path2javec, binary=True)
+    word_vectors = KeyedVectors.load_word2vec_format(paths.path2javec, binary=True)
     # path2javec = '/Users/tomoki/NLP_data/ja-word2vec/ja.tsv'
     # word_vectors = KeyedVectors.load_word2vec_format(path2javec)
 

@@ -206,8 +206,8 @@ def update_parameters():
 
 
 if not orthonormal:
-    l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, config.INPUT_DIM * 1, config.char_HIDDEN_DIM, pc, layer_norm)
-    r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, config.INPUT_DIM * 1, config.char_HIDDEN_DIM, pc, layer_norm)
+    l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, config.char_INPUT_DIM * 1, config.char_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, config.char_INPUT_DIM * 1, config.char_HIDDEN_DIM, pc, layer_norm)
 
     l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, config.char_HIDDEN_DIM + INPUT_DIM * 4, word_HIDDEN_DIM, pc, layer_norm)
     r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, config.char_HIDDEN_DIM + INPUT_DIM * 4, word_HIDDEN_DIM, pc, layer_norm)
@@ -220,8 +220,8 @@ if not orthonormal:
         r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM, bunsetsu_HIDDEN_DIM, pc, layer_norm)
 
 else:
-    l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, config.INPUT_DIM * 1, config.char_HIDDEN_DIM, pc)
-    r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, config.INPUT_DIM * 1, config.char_HIDDEN_DIM, pc)
+    l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, config.char_INPUT_DIM * 1, config.char_HIDDEN_DIM, pc)
+    r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, config.char_INPUT_DIM * 1, config.char_HIDDEN_DIM, pc)
 
     l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, config.char_HIDDEN_DIM + INPUT_DIM * 4, word_HIDDEN_DIM, pc)
     r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, config.char_HIDDEN_DIM + INPUT_DIM * 4, word_HIDDEN_DIM, pc)
@@ -236,7 +236,7 @@ else:
 
 params = {}
 params["lp_w"] = pc.add_lookup_parameters((WORDS_SIZE + 1, INPUT_DIM), init=dy.ConstInitializer(0.))
-params["lp_c"] = pc.add_lookup_parameters((CHARS_SIZE + 1, INPUT_DIM), init=dy.ConstInitializer(0.))
+params["lp_c"] = pc.add_lookup_parameters((CHARS_SIZE + 1, char_INPUT_DIM), init=dy.ConstInitializer(0.))
 params["lp_bp"] = pc.add_lookup_parameters((BIPOS_SIZE + 1, INPUT_DIM), init=dy.ConstInitializer(0.))
 params["lp_p"] = pc.add_lookup_parameters((POS_SIZE + 1, (INPUT_DIM // 10) * 5 * (1 + use_wif_wit)), init=dy.ConstInitializer(0.))
 params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, (INPUT_DIM // 10) * 5 * (1 + use_wif_wit)), init=dy.ConstInitializer(0.))
@@ -447,7 +447,7 @@ def char_embds(char_seq, pdrop):
             if c in pret_embs:
                 pret_chars.append(dy.inputTensor(pret_embs[c]))
             else:
-                pret_chars.append(dy.inputTensor(np.zeros(INPUT_DIM, dtype=np.float32)))
+                pret_chars.append(dy.inputTensor(np.zeros(char_INPUT_DIM, dtype=np.float32)))
         cembs = [dy.dropout(lp_c[char_seq[i]] + pret_chars[i], pdrop)for i in range(len(char_seq))]
     else:
         cembs = [dy.dropout(lp_c[char_seq[i]], pdrop) for i in range(len(char_seq))]
