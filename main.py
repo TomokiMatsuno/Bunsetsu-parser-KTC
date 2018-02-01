@@ -832,7 +832,8 @@ def train(char_seqs,
 
             bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
 
-            if i % batch_pos == 0 or i == len(char_seqs) - 1:
+            # if i % batch_pos == 0 or i == len(char_seqs) - 1:
+            if i % batch_size == 0 or i == len(char_seqs) - 1:
                 loss_feats_batch = dy.esum(losses_feats) + \
                     params_regularization(
                         param_pos_prev,
@@ -841,11 +842,11 @@ def train(char_seqs,
                         param_wit_prev,
                         lp_c_prev
                     )
-                tot_loss_feats += loss_feats_batch.npvalue()
-                if i == len(char_seqs) - 1:
-                    print("feats loss", tot_loss_feats)
-                loss_feats_batch.backward()
-                update_parameters()
+                # tot_loss_feats += loss_feats_batch.npvalue()
+                # if i == len(char_seqs) - 1:
+                #     print("feats loss", tot_loss_feats)
+                # loss_feats_batch.backward()
+                # update_parameters()
                 # print(trainer.get_clip_threshold())
 
             # bi_w_seq = chunk_bi_seqs[idx]
@@ -908,11 +909,13 @@ def train(char_seqs,
 
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
 
-            if (i % batch_dep == 0 or i == len(train_sents) - 1) and i != 0:
+            # if (i % batch_dep == 0 or i == len(train_sents) - 1) and i != 0:
+            if (i % batch_size == 0 or i == len(train_sents) - 1) and i != 0:
 
                 losses_arcs.extend(losses_bunsetsu)
 
-                sum_losses_arcs = dy.esum(losses_arcs)
+                # sum_losses_arcs = dy.esum(losses_arcs)
+                sum_losses_arcs = dy.esum(losses_arcs) + loss_feats_batch
                 sum_losses_arcs_value = sum_losses_arcs.value()
 
                 sum_losses_arcs.backward()
