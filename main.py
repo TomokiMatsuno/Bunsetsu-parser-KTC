@@ -790,7 +790,8 @@ def train(char_seqs,
         np.random.shuffle(sent_ids)
 
         for i in range(len(char_seqs) // divide_train):
-            if i % batch_dep == 0 and i % batch_pos == 0:
+            # if i % batch_dep == 0 and i % batch_pos == 0:
+            if i % batch_size == 0:
                 losses_bunsetsu = []
                 losses_arcs = []
                 losses_feats = []
