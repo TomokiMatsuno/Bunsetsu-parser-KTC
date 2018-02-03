@@ -802,10 +802,10 @@ def train(char_seqs,
         np.random.shuffle(sent_ids)
 
         for i in range(len(char_seqs) // divide_train):
-            if (i % batch_dep == 0 and i % batch_pos == 0 and i > 0) or i == len(char_seqs) - 1:
-            # if i % batch_size == 0:
-
-                dy.renew_cg()
+            # if (i % batch_dep == 0 and i % batch_pos == 0 and i > 0) or i == len(char_seqs) - 1:
+            # # if i % batch_size == 0:
+            #
+            #     dy.renew_cg()
 
 
 
@@ -960,6 +960,9 @@ def train(char_seqs,
                 if show_acc:
                     print("dep accuracy: ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
                     print("dep accuracy not argmax: ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
+
+            if (i % batch_dep == 0 and i % batch_pos == 0 and i > 0) or i == len(char_seqs) - 1:
+                dy.renew_cg()
 
         if show_time:
             print("time in this iter: ", time.time() - prev)
