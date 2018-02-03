@@ -216,8 +216,8 @@ if not orthonormal:
         l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
         r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
     else:
-        l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM + INPUT_DIM * 5, bunsetsu_HIDDEN_DIM, pc, layer_norm)
-        r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM + INPUT_DIM * 5, bunsetsu_HIDDEN_DIM, pc, layer_norm)
+        l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM + INPUT_DIM * 4 + config.char_INPUT_DIM, bunsetsu_HIDDEN_DIM, pc, layer_norm)
+        r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM + INPUT_DIM * 4 + config.char_INPUT_DIM, bunsetsu_HIDDEN_DIM, pc, layer_norm)
 
 else:
     l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, config.char_INPUT_DIM * 1, config.char_HIDDEN_DIM, pc)
@@ -793,8 +793,6 @@ def train(char_seqs,
     lp_c_prev = params["lp_c"].expr().npvalue()
 
     for it in range(train_iter):
-        dy.renew_cg()
-
         num_tot_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep_not_argmax = 0
@@ -804,6 +802,12 @@ def train(char_seqs,
         np.random.shuffle(sent_ids)
 
         for i in range(len(char_seqs) // divide_train):
+            if (i % batch_dep == 0 and i % batch_pos == 0 and i > 0) or i == len(char_seqs) - 1:
+            # if i % batch_size == 0:
+
+                dy.renew_cg()
+
+
 
             if random_pickup:
                 idx = i if not TRAIN else sent_ids[i]
@@ -939,10 +943,10 @@ def train(char_seqs,
 
                 # losses_arcs.extend(losses_bunsetsu)
 
-                if char_base:
-                    sum_losses_arcs = dy.esum(losses_arcs) + loss_feats_batch
-                else:
-                    sum_losses_arcs = dy.esum(losses_arcs)
+                # if char_base:
+                #     sum_losses_arcs = dy.esum(losses_arcs) + loss_feats_batch
+                # else:
+                sum_losses_arcs = dy.esum(losses_arcs)
                 sum_losses_arcs_value = sum_losses_arcs.value()
 
                 sum_losses_arcs.backward()
@@ -952,19 +956,11 @@ def train(char_seqs,
                 losses_arcs = []
                 tot_loss_in_iter += sum_losses_arcs_value
 
-            if i % batch_dep == 0 and i % batch_pos == 0 and i > 0:
-            # if i % batch_size == 0:
-                losses_chunk = []
-                losses_arcs = []
-                losses_feats = []
-
-                dy.renew_cg()
-
-
             if i % show_loss_every == 0 and i != 0:
                 if show_acc:
                     print("dep accuracy: ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
                     print("dep accuracy not argmax: ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
+
         if show_time:
             print("time in this iter: ", time.time() - prev)
         global global_step
