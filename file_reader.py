@@ -125,7 +125,10 @@ class Sent:
         self.make_chunks(lines)
         for ch in self.chunks:
             for word in ch.words:
-                num_char = len(word.feats[0])
+                if config.char_base:
+                    num_char = len(word.feats[0])
+                else:
+                    num_char = 1
 
                 if word.feats[2] != '*' and config.dict_form:
                     self.word_forms.extend(word.feats[2])
