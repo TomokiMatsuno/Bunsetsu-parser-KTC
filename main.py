@@ -1,4 +1,5 @@
 from collections import defaultdict
+import regularization
 
 import numpy as np
 import dynet as dy
@@ -238,10 +239,11 @@ params = {}
 # params["lp_w"] = pc.add_lookup_parameters((WORDS_SIZE + 1, INPUT_DIM), init=dy.ConstInitializer(0.))
 params["lp_c"] = pc.add_lookup_parameters((CHARS_SIZE + 1, char_INPUT_DIM), init=dy.ConstInitializer(0.))
 # params["lp_bp"] = pc.add_lookup_parameters((BIPOS_SIZE + 1, INPUT_DIM), init=dy.ConstInitializer(0.))
-# params["lp_p"] = pc.add_lookup_parameters((POS_SIZE + 1, (INPUT_DIM // 10) * 5 * (1 + use_wif_wit)), init=dy.ConstInitializer(0.))
-# params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, (INPUT_DIM // 10) * 5 * (1 + use_wif_wit)), init=dy.ConstInitializer(0.))
-# params["lp_wif"] = pc.add_lookup_parameters((WIF_SIZE + 1, (INPUT_DIM // 10) * 5), init=dy.ConstInitializer(0.))
-# params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, (INPUT_DIM // 10) * 5), init=dy.ConstInitializer(0.))
+if gold_feats:
+    params["lp_p"] = pc.add_lookup_parameters((POS_SIZE + 1, (INPUT_DIM)), init=dy.ConstInitializer(0.))
+    params["lp_ps"] = pc.add_lookup_parameters((POSSUB_SIZE + 1, (INPUT_DIM)), init=dy.ConstInitializer(0.))
+    params["lp_wif"] = pc.add_lookup_parameters((WIF_SIZE + 1, (INPUT_DIM)), init=dy.ConstInitializer(0.))
+    params["lp_wit"] = pc.add_lookup_parameters((WIT_SIZE + 1, (INPUT_DIM)), init=dy.ConstInitializer(0.))
 
 params["root_emb"] = pc.add_lookup_parameters((1, bunsetsu_HIDDEN_DIM * 2))
 
@@ -319,7 +321,7 @@ def bi_bunsetsu(embs_token, chunk_bi):
     preds = []
 
     for i in range(len(chunk_bi)):
-        probs = dy.softmax(R_bi_b * embs_token[i] + bias_bi_b)
+        probs = dy.softmax(R_bi_b * dy.dropout(leaky_relu(embs_token[i + 1]), pdrop) + bias_bi_b)
         loss.append(-dy.log(dy.pick(probs, chunk_bi[i])))
 
         if show_acc or scheduled_learning or not TRAIN:
@@ -472,21 +474,21 @@ params["param_wit"] = pc.add_parameters((INPUT_DIM, WIT_SIZE))
 # probs = dy.softmax(R_bi_b * wembs[i] + bias_bi_b)
 # loss.append(-dy.log(dy.pick(probs, chunk_bi[i])))
 
-
 def params_regularization(param_pos_prev, param_possub_prev, param_wif_prev, param_wit_prev, lp_c_prev):
+                          # pred_pos_prev, pred_possub_prev):
     param_pos = dy.parameter(params["param_pos"])
     param_possub = dy.parameter(params["param_possub"])
     param_wif = dy.parameter(params["param_wif"])
     param_wit = dy.parameter(params["param_wit"])
 
-    # pred_pos = dy.parameter(params["pred_pos"])
-    # pred_pos_bias = dy.parameter(params["pred_pos_bias"])
-    # pred_possub = dy.parameter(params["pred_possub"])
-    # pred_possub_bias = dy.parameter(params["pred_possub_bias"])
-    # pred_wif = dy.parameter(params["pred_wif"])
-    # pred_wif_bias = dy.parameter(params["pred_wif_bias"])
-    # pred_wit = dy.parameter(params["pred_wit"])
-    # pred_wit_bias = dy.parameter(params["pred_wit_bias"])
+    pred_pos = dy.parameter(params["pred_pos"])
+    pred_pos_bias = dy.parameter(params["pred_pos_bias"])
+    pred_possub = dy.parameter(params["pred_possub"])
+    pred_possub_bias = dy.parameter(params["pred_possub_bias"])
+    pred_wif = dy.parameter(params["pred_wif"])
+    pred_wif_bias = dy.parameter(params["pred_wif_bias"])
+    pred_wit = dy.parameter(params["pred_wit"])
+    pred_wit_bias = dy.parameter(params["pred_wit_bias"])
 
     lp_c = dy.parameter(params["lp_c"])
 
@@ -509,10 +511,24 @@ def params_regularization(param_pos_prev, param_possub_prev, param_wif_prev, par
     return loss * config.params_delta
 
 
+def pred_feats(lstmouts, feats):
+    cors = [0] * 4
 
+    if config.gold_feats:
+        loss = dy.scalarInput(0)
+        lp_p = params["lp_p"]
+        lp_ps = params["lp_ps"]
+        lp_wif = params["lp_wif"]
+        lp_wit = params["lp_wit"]
 
-def pred_feats(lstmouts, feats=None):
-    slen = len(lstmouts)
+        emb_pos = [lp_p[p] for p in feats[0]]
+        emb_possub = [lp_ps[ps] for ps in feats[1]]
+        emb_wif = [lp_wif[w] for w in feats[2]]
+        emb_wit = [lp_wit[w] for w in feats[3]]
+
+        return loss, cors, emb_pos, emb_possub, emb_wif, emb_wit
+
+    lstmouts = [dy.dropout(leaky_relu(l), pdrop) for l in lstmouts]
 
     pred_pos = dy.parameter(params["pred_pos"])
     pred_pos_bias = dy.parameter(params["pred_pos_bias"])
@@ -528,11 +544,6 @@ def pred_feats(lstmouts, feats=None):
     param_wif = dy.parameter(params["param_wif"])
     param_wit = dy.parameter(params["param_wit"])
 
-    smx_pos = []
-    smx_possub = []
-    smx_wif = []
-    smx_wit = []
-
     emb_pos = []
     emb_possub = []
     emb_wif = []
@@ -541,19 +552,16 @@ def pred_feats(lstmouts, feats=None):
     loss = []
 
     for ci in range(len(lstmouts)):
-        # smx_pos.append(dy.softmax(dy.affine_transform([pred_pos_bias, pred_pos, lstmouts[c]])))
-        # smx_possub.append(dy.softmax(dy.affine_transform([pred_possub_bias, pred_possub, lstmouts[c]])))
-        # smx_wif.append(dy.softmax(dy.affine_transform([pred_wif_bias, pred_wif, lstmouts[c]])))
-        # smx_wit.append(dy.softmax(dy.affine_transform([pred_wit_bias, pred_wit, lstmouts[c]])))
         tmp_smx_pos = (dy.softmax(dy.affine_transform([pred_pos_bias, pred_pos, lstmouts[ci]])))
         tmp_smx_possub = (dy.softmax(dy.affine_transform([pred_possub_bias, pred_possub, lstmouts[ci]])))
         tmp_smx_wif = (dy.softmax(dy.affine_transform([pred_wif_bias, pred_wif, lstmouts[ci]])))
         tmp_smx_wit = (dy.softmax(dy.affine_transform([pred_wit_bias, pred_wit, lstmouts[ci]])))
 
-        # tmp_ssn_pos = (dy.softsign(dy.affine_transform([pred_pos_bias, pred_pos, lstmouts[ci]])))
-        # tmp_ssn_possub = (dy.softsign(dy.affine_transform([pred_possub_bias, pred_possub, lstmouts[ci]])))
-        # tmp_ssn_wif = (dy.softsign(dy.affine_transform([pred_wif_bias, pred_wif, lstmouts[ci]])))
-        # tmp_ssn_wit = (dy.softsign(dy.affine_transform([pred_wit_bias, pred_wit, lstmouts[ci]])))
+        if not TRAIN:
+            cors[0] += tmp_smx_pos.npvalue().argmax(0) == feats[0][ci]
+            cors[1] += tmp_smx_possub.npvalue().argmax(0) == feats[1][ci]
+            cors[2] += tmp_smx_wif.npvalue().argmax(0) == feats[2][ci]
+            cors[3] += tmp_smx_wit.npvalue().argmax(0) == feats[3][ci]
 
         loss.append(-dy.log(dy.pick(tmp_smx_pos, feats[0][ci])))
         loss.append(-dy.log(dy.pick(tmp_smx_possub, feats[1][ci])))
@@ -565,39 +573,7 @@ def pred_feats(lstmouts, feats=None):
         emb_wif.append(param_wif * tmp_smx_wif)
         emb_wit.append(param_wit * tmp_smx_wit)
 
-        # emb_pos.append(param_pos * tmp_ssn_pos)
-        # emb_possub.append(param_possub * tmp_ssn_possub)
-        # emb_wif.append(param_wif * tmp_ssn_wif)
-        # emb_wit.append(param_wit * tmp_ssn_wit)
-
-    return dy.esum(loss), emb_pos, emb_possub, emb_wif, emb_wit
-
-    # if feats is not None:
-    #     loss = []
-    #     lstmouts = dy.concatenate_cols(lstmouts)
-    #
-    #     expr_pos = dy.affine_transform([pred_pos_bias, pred_pos, lstmouts])
-    #     expr_possub = dy.affine_transform([pred_possub_bias, pred_possub, lstmouts])
-    #     expr_wif = dy.affine_transform([pred_wif_bias, pred_wif, lstmouts])
-    #     expr_wit = dy.affine_transform([pred_wit_bias, pred_wit, lstmouts])
-    #
-    #     batched_pos = dy.reshape(expr_pos, (POS_SIZE, ), slen)
-    #     batched_possub = dy.reshape(expr_possub, (POSSUB_SIZE, ), slen)
-    #     batched_wif = dy.reshape(expr_wif, (WIF_SIZE, ), slen)
-    #     batched_wit = dy.reshape(expr_wit, (WIT_SIZE, ), slen)
-    #
-    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_pos, feats[0])))
-    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_possub, feats[1])))
-    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wif, feats[2])))
-    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wit, feats[3])))
-    #
-    #     return loss
-    # else:
-    #     dy.softmax(batched_pos)
-    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_possub, feats[1])))
-    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wif, feats[2])))
-    #     loss.append(dy.sum_batches(dy.pickneglogsoftmax_batch(batched_wit, feats[3])))
-
+    return dy.esum(loss), cors, emb_pos, emb_possub, emb_wif, emb_wit
 
 
 
@@ -792,7 +768,29 @@ def train(char_seqs,
     param_wit_prev = dy.parameter(params["param_wit"]).npvalue()
     lp_c_prev = params["lp_c"].expr().npvalue()
 
+    pred_pos_prev = dy.parameter(params["pred_pos"]).npvalue()
+    pred_pos_bias_prev = dy.parameter(params["pred_pos_bias"]).npvalue()
+    pred_possub_prev = dy.parameter(params["pred_possub"]).npvalue()
+    pred_possub_bias_prev = dy.parameter(params["pred_possub_bias"]).npvalue()
+    pred_wif_prev = dy.parameter(params["pred_wif"]).npvalue()
+    pred_wif_bias_prev = dy.parameter(params["pred_wif_bias"]).npvalue()
+    pred_wit_prev = dy.parameter(params["pred_wit"]).npvalue()
+    pred_wit_bias_prev = dy.parameter(params["pred_wit_bias"]).npvalue()
+
+    # R_bi_b_prev = dy.parameter(params["R_bi_b"]).npvalue()
+    # bias_bi_b_prev = dy.parameter(params["bias_bi_b"]).npvalue()
+
     for it in range(train_iter):
+        rp_lpc = regularization.RegParams(params["lp_c"])
+        rp_chunk = regularization.RegParams(params["R_bi_b"])
+        rp_chunk_bias = regularization.RegParams(params["bias_bi_b"])
+        rp_pred_pos = regularization.RegParams(params["pred_pos"])
+        rp_pred_possub = regularization.RegParams(params["pred_possub"])
+        rp_pred_wif = regularization.RegParams(params["pred_wif"])
+        rp_pred_wit = regularization.RegParams(params["pred_wit"])
+
+
+        tot_cors_feats = [0] * 4
         num_tot_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep = 0
         num_tot_cor_bunsetsu_dep_not_argmax = 0
@@ -817,116 +815,83 @@ def train(char_seqs,
             if len(char_seqs[idx]) == 0 or len(chunk_bi_seqs[idx]) == 0:
                 continue
 
-            if char_base:
-                bunsetsu_ranges = ranges([0] + train_sents[idx].chunk_bi_char + [0])
-                chunk_bi_char = train_sents[idx].chunk_bi_char
+            bunsetsu_ranges = ranges([0] + train_sents[idx].chunk_bi_char + [0])
+            chunk_bi_char = train_sents[idx].chunk_bi_char
 
-                cembs = char_embds(char_seqs[idx], pdrop_cemb)
+            cembs = char_embds(char_seqs[idx], pdrop_cemb)
 
-                cembs_lstmouts, l2rs_char, r2ls_char = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop_lstm)
-                loss_feats, embs_pos, embs_possub, embs_wif, embs_wit = \
-                    pred_feats(cembs_lstmouts, [pos_seqs[idx], pos_sub_seqs[idx], wif_seqs[idx], wit_seqs[idx]])
-                losses_feats.append(loss_feats)
+            cembs_lstmouts, l2rs_char, r2ls_char = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop_lstm)
 
-                if not config.share_cembs:
-                    cembs = cembs_lstmouts
+            rp_pred_pos.set_prev_param(), rp_pred_possub.set_prev_param(), \
+            rp_pred_wif.set_prev_param(), rp_pred_wit.set_prev_param()
 
-                embs_feats = [dy.concatenate([cemb, pos, possub, wif, wit])
-                             for cemb, pos, possub, wif, wit in zip(cembs, embs_pos, embs_possub, embs_wif, embs_wit)]
+            loss_feats, cors, embs_pos, embs_possub, embs_wif, embs_wit = \
+                pred_feats(cembs_lstmouts, [pos_seqs[idx], pos_sub_seqs[idx], wif_seqs[idx], wit_seqs[idx]])
 
-                cembs_l2r = [dy.concatenate([l2r_char, emb_feats])
-                             for l2r_char, emb_feats in zip(l2rs_char, embs_feats)]
-                cembs_r2l = [dy.concatenate([r2l_char, emb_feats])
-                             for r2l_char, emb_feats in zip(r2ls_char, embs_feats)]
+            loss_feats += rp_pred_pos.get_loss() + rp_pred_possub.get_loss() + \
+                                rp_pred_wif.get_loss() + rp_pred_wit.get_loss()
 
-                l2rs_char, r2ls_char = inputs2singlelstmouts(l2rlstm_word, cembs_l2r, pdrop_lstm), \
-                                       inputs2singlelstmouts(r2llstm_word, cembs_r2l, pdrop_lstm)
-
-                cembs_bidir = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(l2rs_char, r2ls_char)]
-                loss_chunk, preds_chunk, cor_chunk = bi_bunsetsu(cembs_bidir, chunk_bi_char)
-                losses_chunk.append(loss_chunk)
-
-                l2rs_char, r2ls_char = \
-                    [dy.concatenate([l2r_char, emb_feats]) for l2r_char, emb_feats in zip(l2rs_char, embs_feats)], \
-                    [dy.concatenate([r2l_char, emb_feats]) for r2l_char, emb_feats in zip(r2ls_char, embs_feats)]
-
-                # cembs, l2rs_char, r2ls_char = inputs2lstmouts(l2rlstm_word, r2llstm_word, cembs, pdrop_lstm)
-                bembs, l2rs_bunsetsu, r2ls_bunsetsu = segment_embds(l2rs_char, r2ls_char, bunsetsu_ranges, offset=1)
-                bembs_l2r, bembs_r2l = inputs2singlelstmouts(l2rlstm_bunsetsu, l2rs_bunsetsu, pdrop_lstm), \
-                                       inputs2singlelstmouts(r2llstm_bunsetsu, r2ls_bunsetsu, pdrop_lstm)
-
-                bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
-
-                if i % batch_pos == 0 or i == len(char_seqs) - 1:
-                # if i % batch_size == 0 or i == len(char_seqs) - 1:
-                    loss_feats_batch = dy.esum(losses_feats) + \
-                        params_regularization(
-                            param_pos_prev,
-                            param_possub_prev,
-                            param_wif_prev,
-                            param_wit_prev,
-                            lp_c_prev
-                        )
-                    loss_feats_batch += dy.esum(losses_chunk)
-                    losses_feats = []
-                    losses_chunk = []
-                    tot_loss_feats += loss_feats_batch.npvalue()
-                    if i == len(char_seqs) - 1:
-                        print("feats loss", tot_loss_feats)
-                    loss_feats_batch.backward()
-                    update_parameters()
-                # print(trainer.get_clip_threshold())
-
-            else:
-                bi_w_seq = chunk_bi_seqs[idx]
-
-                word_ranges = ranges(word_bi_seqs[idx])
-                wembs = word_embds(char_seqs[idx], pos_seqs[idx],
-                                   pos_sub_seqs[idx], wif_seqs[idx], wit_seqs[idx], word_ranges)
-
-                if use_cembs:
-                    cembs = char_embds(char_seqs[idx])
-                    cembs, l2r_char, r2l_char = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop_cemb)
-                    cembs = segment_embds(l2r_char, r2l_char, word_ranges, offset=0, segment_concat=True)
-                    wembs = [dy.concatenate([wemb, cemb]) for wemb, cemb in zip(wembs, cembs)]
+            losses_feats.append(loss_feats)
 
 
+            embs_feats = [dy.concatenate([cemb, pos, possub, wif, wit])
+                         for cemb, pos, possub, wif, wit in zip(cembs, embs_pos, embs_possub, embs_wif, embs_wit)]
 
-                if wemb_lstm:
-                    wembs, wembs_l2r, wembs_r2l = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop_lstm)
+            cembs_l2r = [dy.concatenate([l2r_char, emb_feats])
+                         for l2r_char, emb_feats in zip(l2rs_char, embs_feats)]
+            cembs_r2l = [dy.concatenate([r2l_char, emb_feats])
+                         for r2l_char, emb_feats in zip(r2ls_char, embs_feats)]
 
-                if relu_toprecur:
-                    wembs = [leaky_relu(wemb) for wemb in wembs]
+            l2rs_char, r2ls_char = inputs2singlelstmouts(l2rlstm_word, cembs_l2r, pdrop_lstm), \
+                                   inputs2singlelstmouts(r2llstm_word, cembs_r2l, pdrop_lstm)
 
-                if chunker:
-                    loss_bi_bunsetsu, bi_bunsetsu_preds, _ = bi_bunsetsu(wembs, bi_w_seq)
-                    losses_bunsetsu.append(loss_bi_bunsetsu)
+            cembs_bidir = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(l2rs_char, r2ls_char)]
+            rp_chunk.set_prev_param(), rp_chunk_bias.set_prev_param()
+            loss_chunk, preds_chunk, _ = bi_bunsetsu(cembs_bidir, chunk_bi_char)
 
-                bunsetsu_ranges = ranges(bi_w_seq)
-                aux_positions = aux_position(bunsetsu_ranges, pos_seqs[idx], pos_sub_seqs[idx])
+            loss_chunk += rp_pred_pos.get_loss() + rp_pred_possub.get_loss() + \
+                          rp_pred_wif.get_loss() + rp_pred_wit.get_loss()
 
-                if wemb_lstm:
-                    bembs, bembs_l2r, bembs_r2l = bunsetsu_embds(wembs_l2r, wembs_r2l, bunsetsu_ranges, aux_positions, pdrop_lstm)
-                else:
-                    if bembs_average_flag:
-                        bembs = bembs_average(wembs, bunsetsu_ranges)
-                    else:
-                        bembs = bunsetsu_embds(wembs, wembs, bunsetsu_ranges, aux_positions, pdrop_lstm)
+            losses_chunk.append(loss_chunk)
 
-                if bemb_lstm:
-                    if not bembs_average_flag:
-                        bembs_l2r = inputs2singlelstmouts(l2rlstm_bunsetsu, bembs_l2r, pdrop_lstm)
-                        bembs_r2l = inputs2singlelstmouts(r2llstm_bunsetsu, bembs_r2l, pdrop_lstm)
-                        if cont_aux_separated:
-                            bembs = bembs_MLPs(bembs_l2r, bembs_r2l)
-                        else:
-                            bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
-                    else:
-                        bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_lstm)
+            l2rs_char, r2ls_char = \
+                [dy.concatenate([l2r_char, emb_feats]) for l2r_char, emb_feats in zip(l2rs_char, embs_feats)], \
+                [dy.concatenate([r2l_char, emb_feats]) for r2l_char, emb_feats in zip(r2ls_char, embs_feats)]
 
-                bembs = [dy.dropout(bemb, pdrop) for bemb in bembs]
+            # cembs, l2rs_char, r2ls_char = inputs2lstmouts(l2rlstm_word, r2llstm_word, cembs, pdrop_lstm)
+            bembs, l2rs_bunsetsu, r2ls_bunsetsu = segment_embds(l2rs_char, r2ls_char, bunsetsu_ranges, offset=1)
+            bembs_l2r, bembs_r2l = inputs2singlelstmouts(l2rlstm_bunsetsu, l2rs_bunsetsu, pdrop_lstm), \
+                                   inputs2singlelstmouts(r2llstm_bunsetsu, r2ls_bunsetsu, pdrop_lstm)
+
+            bembs = [dy.concatenate([l2r, r2l]) for l2r, r2l in zip(bembs_l2r, bembs_r2l)]
+
+            if i % batch_pos == 0 or i == len(char_seqs) - 1:
+            # if i % batch_size == 0 or i == len(char_seqs) - 1:
+                loss_feats_batch = dy.esum(losses_feats) + rp_lpc.get_loss()
+            #     loss_feats_batch = dy.esum(losses_feats) + \
+            #         params_regularization(
+            #             param_pos_prev,
+            #             param_possub_prev,
+            #             param_wif_prev,
+            #             param_wit_prev,
+            #             lp_c_prev,
+            #             # pred_pos_prev,
+            #             # pred_possub_prev,
+            #             # pred_wif_prev,
+            #             # pred_wit_prev
+            #         )
+                loss_feats_batch += dy.esum(losses_chunk)
+                losses_feats = []
+                losses_chunk = []
+                tot_loss_feats += loss_feats_batch.npvalue()
+                if i == len(char_seqs) - 1:
+                    print("feats loss", tot_loss_feats)
+                loss_feats_batch.backward()
+                update_parameters()
+            # print(trainer.get_clip_threshold())
 
             arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs, pdrop)
+            arc_loss += rp_chunk.get_loss() + rp_chunk_bias.get_loss()
 
             if show_acc:
                 num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds[:-1], train_chunk_deps[idx][:-1]))
@@ -934,27 +899,20 @@ def train(char_seqs,
 
             num_tot_bunsetsu_dep += len(bembs) - config.root - 1
 
-            # loss_feats += params_regularization(param_pos_prev, param_possub_prev, param_wif_prev, param_wit_prev)
-
             losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
 
             if (i % batch_dep == 0 or i == len(train_sents) - 1) and i != 0:
             # if (i % batch_size == 0 or i == len(train_sents) - 1) and i != 0:
-
-                # losses_arcs.extend(losses_bunsetsu)
-
-                # if char_base:
-                #     sum_losses_arcs = dy.esum(losses_arcs) + loss_feats_batch
-                # else:
                 sum_losses_arcs = dy.esum(losses_arcs)
+                # sum_losses_arcs += rp_chunk.get_loss() + rp_chunk_bias.get_loss()
                 sum_losses_arcs_value = sum_losses_arcs.value()
 
                 sum_losses_arcs.backward()
                 update_parameters()
+                tot_loss_in_iter += sum_losses_arcs_value
+                losses_arcs = []
                 # global global_step
                 # global_step += 1
-                losses_arcs = []
-                tot_loss_in_iter += sum_losses_arcs_value
 
             if i % show_loss_every == 0 and i != 0:
                 if show_acc:
@@ -1011,6 +969,8 @@ def dev(char_seqs,
     tot_chunk = 0
 
     tot_cor_chunk = 0
+    tot_cors_feats = [0] * 4
+    tot_char = 0
 
     num_tot_bunsetsu_dep = 0
     num_tot_cor_bunsetsu_dep = 0
@@ -1035,15 +995,15 @@ def dev(char_seqs,
         bunsetsu_ranges = ranges([0] + dev_sents[idx].chunk_bi_char + [0])
 
         chunk_bi_char = dev_sents[idx].chunk_bi_char
+        tot_char += len(char_seqs[idx])
 
         cembs = char_embds(char_seqs[idx], pdrop_cemb)
 
         cembs_lstmouts, l2rs_char, r2ls_char = inputs2lstmouts(l2rlstm_char, r2llstm_char, cembs, pdrop_lstm)
-        loss_feats, embs_pos, embs_possub, embs_wif, embs_wit = \
+        loss_feats, cors, embs_pos, embs_possub, embs_wif, embs_wit = \
             pred_feats(cembs_lstmouts, [pos_seqs[idx], pos_sub_seqs[idx], wif_seqs[idx], wit_seqs[idx]])
 
-        if not config.share_cembs:
-            cembs = cembs_lstmouts
+        tot_cors_feats = [sum(x) for x in zip(tot_cors_feats, cors)]
 
         embs_feats = [dy.concatenate([cemb, pos, possub, wif, wit])
                       for cemb, pos, possub, wif, wit in zip(cembs, embs_pos, embs_possub, embs_wif, embs_wit)]
@@ -1107,11 +1067,22 @@ def dev(char_seqs,
     print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep, end='\t')
     print(i, " accuracy dep chunk", num_tot_cor_bunsetsu_dep_chunk / num_tot_bunsetsu_dep, end='\t')
     print(i, " accuracy chunk ", tot_cor_chunk / num_tot_bunsetsu_dep, end='\n')
+
+    with open(result_file, mode='a', encoding='utf-8') as f:
+        [f.write(str(fi / tot_char) + '\t') for fi in tot_cors_feats]
+        [print(fi / tot_char) for fi in tot_cors_feats]
+
+
+
     # acc.append(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
     acc.extend([num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep] * train_iter)
     if output_result:
         with open(result_file, mode='a', encoding='utf-8') as f:
             f.write(str(i) + " accuracy dep " + str(num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep) + '\n')
+            f.write(str(i) + " accuracy dep chunk" + str(num_tot_cor_bunsetsu_dep_chunk / num_tot_bunsetsu_dep) + '\n')
+            f.write(str(i) + " accuracy chunk " + str(tot_cor_chunk / num_tot_bunsetsu_dep) + '\n')
+            print(i, " accuracy chunk ", tot_cor_chunk / num_tot_bunsetsu_dep, end='\n')
+
             f.write("total arc loss: " + str(total_loss / len(dev_sents)) + '\n')
             if chunker:
                 f.write(str(i) + " accuracy chunking " + str(tot_cor_chunk / tot_chunk) + '\n')
