@@ -1,9 +1,7 @@
 import codecs
 import re
 import config
-from collections import Counter
-# import MeCab
-# mecab = MeCab.Tagger("/opt/local/lib/mecab/dic/mecab-ipadic-neologd")
+
 
 def make_line_chunks(lines, trigger, end_marker=None):
     lines_idx = 0
@@ -119,53 +117,20 @@ class Sent:
         self.char_forms = []
         self.word_biposes = []
         self.chunk_bis = []
-        self.chunk_bi_char = []
-        text = ""
 
         self.make_chunks(lines)
         for ch in self.chunks:
             for word in ch.words:
-                if config.char_base:
-                    num_char = len(word.feats[0])
-                else:
-                    num_char = 1
-
-                if word.feats[2] != '*' and config.dict_form:
-                    self.word_forms.extend(word.feats[2])
-                else:
-                    self.word_forms.extend(word.feats[0])
-
-                if config.BI_feats:
-                    self.pos.extend(['B_' + word.feats[3]] + ['I_' + word.feats[3]] * ((num_char - 1) * config.char_base))
-                    self.pos_sub.extend(['B_' + word.feats[4]] + ['I_' + word.feats[4]] * ((num_char - 1) * config.char_base))
-                    self.word_inflection_forms.extend(['B_' + word.feats[5]] + ['I_' + word.feats[5]] * ((num_char - 1) * config.char_base))
-                    self.word_inflection_types.extend(['B_' + word.feats[6]] + ['I_' + word.feats[6]] * ((num_char - 1) * config.char_base))
-                else:
-                    self.pos.extend([word.feats[3]] * (1 + (num_char - 1) * config.char_base))
-                    self.pos_sub.extend([word.feats[4]] * (1 + (num_char - 1) * config.char_base))
-                    self.word_inflection_forms.extend([word.feats[5]] * (1 + (num_char - 1) * config.char_base))
-                    self.word_inflection_types.extend([word.feats[6]] * (1 + (num_char - 1) * config.char_base))
-
-
-                self.chunk_bis.extend(word.chunk_bi)
-                for ci in range(num_char):
-                    if word.chunk_bi == 'B' and ci == 0:
-                        self.chunk_bi_char.append(0)
-                    else:
-                        self.chunk_bi_char.append(1)
-
+                self.word_forms.append(word.feats[0])
+                self.pos.append(word.feats[3])
+                self.pos_sub.append(word.feats[4])
+                self.word_inflection_forms.append(word.feats[5])
+                self.word_inflection_types.append(word.feats[6])
+                self.chunk_bis.append(word.chunk_bi)
                 for char in word.chars:
-                    self.char_forms.extend([char.form])
-                    text = text + char.form
-                    self.word_biposes.extend([char.word_bipos])
+                    self.char_forms.append(char.form)
+                    self.word_biposes.append(char.word_bipos)
                     # self.chunk_bis.append(char.chunk_bi)
-
-        # if config.use_mecab:
-        #     tagged_text = mecab('')
-        #     node = mecab.parseToNode(text)
-
-
-
 
 
 
@@ -176,23 +141,7 @@ class Sent:
             self.chunks.append(Chunk(cls))
 
 class Dict:
-    def __init__(self, doc, initial_entries=None, set_BI=False):
-        seq = []
-        seq_BI = []
-        self.set_BI = set_BI
-
-        for d in doc:
-            seq.extend(d)
-
-        # if not set_BI:
-        #     pass
-        # else:
-        #     for s in seq:
-        #         seq_BI.extend('B_' + s)
-        #         seq_BI.extend('I_' + s)
-        #     seq = seq_BI
-
-        self.cnt = Counter(seq)
+    def __init__(self, doc, initial_entries=None):
         self.i2x = {}
         self.x2i = {}
         self.appeared_x2i = {}
@@ -207,11 +156,6 @@ class Dict:
         for line in doc:
             for ent in line:
                 self.add_entry(ent)
-                # if config.TRAIN or not set_BI:
-                #     self.add_entry(ent)
-                # else:
-                #     self.add_entry('B_' + ent)
-                #     self.add_entry('I_' + ent)
 
     # def add_entry(self, ent):
     #     if ent not in self.x2i or self.x2i[ent] == self.x2i["UNK"]:
@@ -231,17 +175,9 @@ class Dict:
 
     def add_entry(self, ent):
         if ent not in self.x2i:
-            if self.cnt[ent] > config.min_occur_count or not self.freezed:
-                if ent in self.initial_entries or not self.set_BI:
-                    self.i2x[len(self.i2x)] = ent
-                    self.x2i[ent] = len(self.x2i)
-                else:
-                    self.i2x[len(self.i2x)] = 'B_' + ent
-                    self.x2i['B_' + ent] = len(self.x2i)
-                    self.i2x[len(self.i2x)] = 'I_' + ent
-                    self.x2i['I_' + ent] = len(self.x2i)
-                    self.i2x[len(self.i2x)] = ent
-                    self.x2i[ent] = len(self.x2i)
+            if not self.freezed:
+                self.i2x[len(self.i2x)] = ent
+                self.x2i[ent] = len(self.x2i)
             else:
                 self.x2i[ent] = self.x2i["UNK"]
 
@@ -341,10 +277,10 @@ class DataFrameKtc(DataFrame):
         wd = Dict(doc_word_forms, initial_entries)
         cd = Dict(doc_char_forms, initial_entries)
         bpd = Dict(doc_word_biposes, ["NULL", "UNK", "B_ROOT", "B_BOS", "B_EOS", "B_DUMMY"])
-        td = Dict(doc_pos, initial_entries, set_BI=config.BI_feats)
-        tsd = Dict(doc_pos_sub, initial_entries, set_BI=False)
-        wif = Dict(doc_word_inflection_forms, initial_entries, set_BI=False)
-        wit = Dict(doc_word_inflection_types, initial_entries, set_BI=False)
+        td = Dict(doc_pos, initial_entries)
+        tsd = Dict(doc_pos_sub, initial_entries)
+        wif = Dict(doc_word_inflection_forms, initial_entries)
+        wit = Dict(doc_word_inflection_types, initial_entries)
 
         return wd, cd, bpd, td, tsd, wif, wit
 
