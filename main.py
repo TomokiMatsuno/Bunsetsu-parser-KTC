@@ -302,26 +302,41 @@ params["root_emb"] = pc.add_lookup_parameters((1, bunsetsu_HIDDEN_DIM * 2))
 # params["func_MLP_bias"] = pc.add_parameters((word_HIDDEN_DIM))
 
 if orthonormal and not TEST:
-    W = orthonormal_initializer(MLP_HIDDEN_DIM, 2 * bunsetsu_HIDDEN_DIM)
+    W = orthonormal_initializer(MLP_HIDDEN_DIM * 2, 2 * bunsetsu_HIDDEN_DIM)
 
     params["dep_MLP"] = pc.parameters_from_numpy(W)
-    params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
+    params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM * 2), init=dy.ConstInitializer(0.))
 
-    if not config.same_MLP:
+    # if not config.same_MLP:
+    #     params["head_MLP"] = pc.parameters_from_numpy(W)
+    #     params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
+    if config.stacked_MLP:
+        W = orthonormal_initializer(MLP_HIDDEN_DIM, MLP_HIDDEN_DIM)
         params["head_MLP"] = pc.parameters_from_numpy(W)
         params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
     # W = orthonormal_initializer(MLP_HIDDEN_DIM + biaffine_bias_y, MLP_HIDDEN_DIM + biaffine_bias_x)
-    params["R_bunsetsu_biaffine"] = pc.add_parameters((bunsetsu_HIDDEN_DIM * 2 if config.shallow else MLP_HIDDEN_DIM))
+    params["W_r"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
+    params["W_i"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
     # params["R_bunsetsu_biaffine"] = pc.parameters_from_numpy(W)
+    params["bias_x"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
+    params["bias_y"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
+
 
 else:
-    params["dep_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * 2))
-    params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
-    if not config.same_MLP:
-        params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * 2 + config.word_order * word_order_DIM))
+    params["dep_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
+    params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM * 2), init=dy.ConstInitializer(0.))
+    # if not config.same_MLP:
+    #     params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * 2 + config.word_order * word_order_DIM))
+    #     params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
+    if not config.stacked_MLP:
+        params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, MLP_HIDDEN_DIM))
         params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
     # params["R_bunsetsu_biaffine"] = pc.add_parameters((MLP_HIDDEN_DIM + biaffine_bias_y, MLP_HIDDEN_DIM + biaffine_bias_x))
-    params["R_bunsetsu_biaffine"] = pc.add_parameters((bunsetsu_HIDDEN_DIM * 2 if config.shallow else MLP_HIDDEN_DIM))
+    params["W_r"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
+    params["W_i"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
+    params["bias_x"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
+    params["bias_y"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
+
 
 
 def inputs2lstmouts(l2rlstm, r2llstm, inputs, pdrop):
@@ -367,11 +382,14 @@ def dep_bunsetsu(bembs, pdrop, golds):
     dep_MLP = dy.parameter(params["dep_MLP"])
     dep_MLP_bias = dy.parameter(params["dep_MLP_bias"])
 
-    if not config.same_MLP:
+    if config.stacked_MLP or not config.same_MLP:
         head_MLP = dy.parameter(params["head_MLP"])
         head_MLP_bias = dy.parameter(params["head_MLP_bias"])
 
-    R_bunsetsu_biaffine = dy.parameter(params["R_bunsetsu_biaffine"])
+    W_r = dy.parameter(params["W_r"])
+    W_i = dy.parameter(params["W_i"])
+    bias_x = dy.parameter(params["bias_x"])
+    bias_y = dy.parameter(params["bias_y"])
 
     if not config.root:
         bembs = [root_emb[0]] + bembs
@@ -380,27 +398,34 @@ def dep_bunsetsu(bembs, pdrop, golds):
 
     bembs_dep = bembs_head = bembs
 
+    bembs_dep = dy.dropout(
+        dy.concatenate(bembs_dep, 1), pdrop)
     if not config.shallow:
-        bembs_dep = dy.dropout(
-            dy.concatenate(bembs_dep, 1), pdrop)
         if not config.same_MLP:
             bembs_head = dy.dropout(
                 dy.concatenate(bembs_head, 1), pdrop)
 
-    if config.shallow:
+    if config.stacked_MLP:
+        bembs_dep = dy.dropout(leaky_relu(
+            dy.affine_transform([dep_MLP_bias, dep_MLP, bembs_dep])), pdrop)
+        bembs_dep = dy.affine_transform([head_MLP_bias, head_MLP, bembs_dep])
+
+    if config.shallow or config.stacked_MLP:
+        bembs_dep = dy.dropout(leaky_relu(
+            dy.affine_transform([dep_MLP_bias, dep_MLP, bembs_dep])), pdrop)
         bembs_dep = dy.dropout(leaky_relu(bembs_dep), pdrop)
     else:
         bembs_dep = dy.dropout(leaky_relu(
             dy.affine_transform([dep_MLP_bias, dep_MLP, bembs_dep])), pdrop)
 
-    if not config.same_MLP:
-        bembs_head = dy.dropout(leaky_relu(
-           dy.affine_transform([head_MLP_bias, head_MLP, bembs_head])), pdrop)
+    # if not config.same_MLP or config.stacked_MLP:
+    #     bembs_head = dy.dropout(leaky_relu(
+    #         dy.affine_transform([head_MLP_bias, head_MLP, bembs_head])), pdrop)
 
     # blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_head, input_size, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
-    W = dy.concatenate_cols([R_bunsetsu_biaffine] * slen_x)
-    blin = (dy.transpose(dy.cmult(bembs_dep, W)) * bembs_dep)
-
+    # W = dy.concatenate_cols([W_r] * slen_x)
+    # blin = (dy.transpose(dy.cmult(bembs_dep, W)) * bembs_dep)
+    blin = biED(bembs_dep, W_r, W_i, bembs_dep, seq_len=slen_x, num_outputs=1)
 
     arc_preds = []
     arc_preds_not_argmax = []
