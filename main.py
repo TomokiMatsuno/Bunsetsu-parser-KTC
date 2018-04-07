@@ -374,7 +374,6 @@ def inputs2singlelstmouts(lstm, inputs, pdrop, reverse=False):
 
     return lstm_outs
 
-
 def dep_bunsetsu(bembs, pdrop, golds):
     if not config.root:
         root_emb = params["root_emb"]
@@ -427,9 +426,22 @@ def dep_bunsetsu(bembs, pdrop, golds):
     # blin = (dy.transpose(dy.cmult(bembs_dep, W)) * bembs_dep)
     blin = biED(bembs_dep, W_r, W_i, bembs_dep, seq_len=slen_x, num_outputs=1)
 
+    if not config.comp:
+        matrix_lower = left_arc_mask(slen_x, transpose=True)
+        M_low = dy.inputTensor(matrix_lower)
+        blin_low = dy.cmult(blin, M_low)
+        blin_up = dy.cmult(blin, dy.transpose(M_low))
+        if config.symmetric:
+            blin = blin_up + dy.transpose(blin_low)
+        else:
+            blin = blin_up - dy.transpose(blin_low)
+
     arc_preds = []
     arc_preds_not_argmax = []
     loss = dy.scalarInput(0)
+
+    # loss += dy.sum_elems(dy.rectify(dy.cmult(blin, M_low))) * 100
+    # blin = dy.cmult(dy.abs(blin), M_low)
 
     if not TRAIN:
         # arc_preds_not_argmax = blin.npvalue().argmax(0)
