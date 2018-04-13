@@ -77,7 +77,7 @@ def biED(x, V_r, V_i, y, seq_len, num_outputs, bias_x=None, bias_y=None):
         Y = dy.concatenate([y_r, y_i, y_i, -y_r])
         W = dy.concatenate([W_r, W_r, W_i, -W_i])
         WY = dy.reshape(dy.cmult(W, Y), (input_size // 2 * 4, seq_len * num_outputs))
-    elif config.symmetric:
+    elif config.symmetric or config.cancel_lower:
         X = dy.concatenate([x_r, x_i])
         Y = dy.concatenate([y_r, y_i])
         W = dy.concatenate([W_r, W_i])
@@ -193,13 +193,21 @@ def arc_argmax(parse_probs, length, tokens_to_keep, ensure_tree=True):
     if ensure_tree:
         I = np.eye(len(tokens_to_keep))
         # block loops and pad heads
-        parse_probs = parse_probs * tokens_to_keep * (1 - I)
         arc_masks = left_arc_mask(length)
         parse_probs = parse_probs * arc_masks
+        parse_probs = np.reshape((parse_probs), (len(tokens_to_keep), len(tokens_to_keep)))
+        tmp = parse_probs[-1:, :]
+        parse_probs = np.concatenate((parse_probs[:-1, -1:], parse_probs[:-1, :-1]), axis=1)
+        parse_probs = np.concatenate((tmp, parse_probs))
+
+        parse_probs = parse_probs * tokens_to_keep * (1 - I)
         parse_preds = np.argmax(parse_probs, axis=1)
         tokens = np.arange(1, length) #original
         # tokens = np.arange(length) #modified
-        roots = np.where(parse_preds[tokens] == 0)[0] + 1 #original
+        # root_idx = len(tokens_to_keep) - 1
+        root_idx = 0
+
+        roots = np.where(parse_preds[tokens] == root_idx)[0] + 1 #original
         # roots = np.where(parse_preds[tokens] == 0)[0] #modified
         # ensure at least one root
         if len(roots) < 1:
@@ -207,7 +215,7 @@ def arc_argmax(parse_probs, length, tokens_to_keep, ensure_tree=True):
             # root_0 += 1
 
             # The current root probabilities
-            root_probs = parse_probs[tokens, 0]
+            root_probs = parse_probs[tokens, root_idx]
             # The current head probabilities
             old_head_probs = parse_probs[tokens, parse_preds[tokens]]
             # Get new potential root probabilities
@@ -215,16 +223,16 @@ def arc_argmax(parse_probs, length, tokens_to_keep, ensure_tree=True):
             # Select the most probable root
             new_root = tokens[np.argmax(new_root_probs)]
             # Make the change
-            parse_preds[new_root] = 0
+            parse_preds[new_root] = root_idx
         # ensure at most one root
         elif len(roots) > 1:
             # global root_more_than_1
             # root_more_than_1 += 1
 
             # The probabilities of the current heads
-            root_probs = parse_probs[roots, 0]
+            root_probs = parse_probs[roots, root_idx]
             # Set the probability of depending on the root zero
-            parse_probs[roots, 0] = 0
+            parse_probs[roots, root_idx] = 0
             # Get new potential heads and their probabilities
             new_heads = np.argmax(parse_probs[roots][:, tokens], axis=1) + 1 # original line
             # new_heads = np.argmax(parse_probs[roots][:, tokens], axis=1) # modified line
@@ -233,7 +241,7 @@ def arc_argmax(parse_probs, length, tokens_to_keep, ensure_tree=True):
             new_root = roots[np.argmin(new_head_probs)]
             # Make the change
             parse_preds[roots] = new_heads
-            parse_preds[new_root] = 0
+            parse_preds[new_root] = root_idx
         # remove cycles
         tarjan = Tarjan(parse_preds, tokens)
         cycles = tarjan.SCCs

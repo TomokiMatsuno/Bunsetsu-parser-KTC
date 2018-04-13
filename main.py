@@ -424,7 +424,7 @@ def dep_bunsetsu(bembs, pdrop, golds):
     # blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_head, input_size, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
     # W = dy.concatenate_cols([W_r] * slen_x)
     # blin = (dy.transpose(dy.cmult(bembs_dep, W)) * bembs_dep)
-    blin = biED(bembs_dep, W_r, W_i, bembs_dep, seq_len=slen_x, num_outputs=1)
+    blin = biED(bembs_dep, W_r, W_i, bembs_dep, seq_len=slen_x, num_outputs=1, bias_x=bias_x, bias_y=bias_x)
 
     if not config.comp:
         matrix_lower = left_arc_mask(slen_x, transpose=True)
@@ -433,8 +433,13 @@ def dep_bunsetsu(bembs, pdrop, golds):
         blin_up = dy.cmult(blin, dy.transpose(M_low))
         if config.symmetric:
             blin = blin_up + dy.transpose(blin_low)
-        else:
+        elif config.anti_symmetric:
             blin = blin_up - dy.transpose(blin_low)
+        elif config.cancel_lower:
+            blin = blin_up
+        else:
+            raise ValueError('please specify at least one mode from below: symmetric, anti_symmetric or cancel_lower')
+
 
     arc_preds = []
     arc_preds_not_argmax = []
@@ -448,11 +453,11 @@ def dep_bunsetsu(bembs, pdrop, golds):
         msk = [1] * slen_x
         arc_probs = dy.softmax(blin).npvalue()
         arc_probs = np.transpose(arc_probs)
-        arc_preds = arc_argmax(arc_probs, slen_x, msk)
-        arc_preds = arc_preds[1:]
+        arc_preds = arc_argmax(arc_probs, slen_x, msk, ensure_tree=True)
+        arc_preds = arc_preds[:-1]
 
     arc_loss = dy.reshape(blin, (slen_y,), slen_x) + loss
-    arc_loss = dy.pick_batch_elems(arc_loss, [i for i in range(1, slen_x)])
+    arc_loss = dy.pick_batch_elems(arc_loss, [i for i in range(0, slen_x - 1)])
 
     return arc_loss, arc_preds, arc_preds_not_argmax
 
@@ -765,7 +770,10 @@ def train(char_seqs,
 
             num_tot_bunsetsu_dep += len(bembs) - config.root - 1
 
-            losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, train_chunk_deps[idx])))
+            gold = train_chunk_deps[idx][:-1] + [len(train_chunk_deps[idx]) + 1]
+            gold = [e - 1 for e in gold]
+
+            losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, gold)))
 
             global global_step
             if (i % batch_size == 0 or i == len(train_sents) - 1) and i != 0:
@@ -887,9 +895,13 @@ def dev(char_seqs,
                 print("time: ", time.time() - prev)
             prev = time.time()
 
-        arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs, pdrop, dev_chunk_deps[idx])
+        gold = dev_chunk_deps[idx][:-1] + [len(dev_chunk_deps[idx]) + 1]
+        gold = [e - 1 for e in gold]
+        gold = dev_chunk_deps[idx]
 
-        total_loss += dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, dev_chunk_deps[i])).value()
+        arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs, pdrop, gold)
+
+        total_loss += dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, gold)).value()
 
         num_tot_bunsetsu_dep += len(bembs) - config.root - 1
 
@@ -897,7 +909,7 @@ def dev(char_seqs,
             failed_chunking += 1
             continue
 
-        num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds[:-1], dev_chunk_deps[i][:-1]))
+        num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds[1:], gold[:-1]))
 
     global best_acc
     global update
