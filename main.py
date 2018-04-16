@@ -70,6 +70,7 @@ if JOS:
 
 if MINI_SET:
     files = [path2KTC + 'miniKTC_train.txt', path2KTC + 'miniKTC_dev.txt']
+    # files = [path2KTC + 'miniKTC_dev.txt', path2KTC + 'miniKTC_dev.txt']
 
 # save_file = 'KTC' + \
 save_file = 'KTC'
@@ -251,21 +252,21 @@ if not orthonormal:
                                                       bunsetsu_HIDDEN_DIM, pc)
 
 else:
-    l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc)
-    r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc)
+    l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc, layer_norm)
+    r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc, layer_norm)
 
-    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc)
-    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc)
+    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
 
     # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
     # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
 
     if bembs_average_flag:
-        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc)
+        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
+        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
     else:
-        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
-        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc)
+        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc, layer_norm)
+        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc, layer_norm)
 
 
 params = {}
@@ -314,10 +315,11 @@ if orthonormal and not TEST:
         W = orthonormal_initializer(MLP_HIDDEN_DIM, MLP_HIDDEN_DIM)
         params["head_MLP"] = pc.parameters_from_numpy(W)
         params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
-    # W = orthonormal_initializer(MLP_HIDDEN_DIM + biaffine_bias_y, MLP_HIDDEN_DIM + biaffine_bias_x)
     params["W_r"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
     params["W_i"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
-    # params["R_bunsetsu_biaffine"] = pc.parameters_from_numpy(W)
+    if config.biaffine:
+        W = orthonormal_initializer(MLP_HIDDEN_DIM * 2 + biaffine_bias_y, MLP_HIDDEN_DIM * 2 + biaffine_bias_x)
+        params["R_bunsetsu_biaffine"] = pc.parameters_from_numpy(W)
     params["bias_x"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
     params["bias_y"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
 
@@ -331,13 +333,19 @@ else:
     if not config.stacked_MLP:
         params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, MLP_HIDDEN_DIM))
         params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
-    # params["R_bunsetsu_biaffine"] = pc.add_parameters((MLP_HIDDEN_DIM + biaffine_bias_y, MLP_HIDDEN_DIM + biaffine_bias_x))
+    if config.biaffine:
+        params["R_bunsetsu_biaffine"] = pc.add_parameters((MLP_HIDDEN_DIM + biaffine_bias_y, MLP_HIDDEN_DIM + biaffine_bias_x))
     params["W_r"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
     params["W_i"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
     params["bias_x"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
     params["bias_y"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
 
 
+if config.normalization:
+    params["norm_gain_MLP"] = pc.add_parameters((bunsetsu_HIDDEN_DIM * 2))
+    params["norm_bias_MLP"] = pc.add_parameters((bunsetsu_HIDDEN_DIM * 2))
+    params["norm_gain_classifier"] = pc.add_parameters((MLP_HIDDEN_DIM * 2))
+    params["norm_bias_classifier"] = pc.add_parameters((MLP_HIDDEN_DIM * 2))
 
 def inputs2lstmouts(l2rlstm, r2llstm, inputs, pdrop):
     l2rlstm.set_dropouts(pdrop, pdrop)
@@ -380,6 +388,10 @@ def dep_bunsetsu(bembs, pdrop, golds):
 
     dep_MLP = dy.parameter(params["dep_MLP"])
     dep_MLP_bias = dy.parameter(params["dep_MLP_bias"])
+    norm_gain_MLP = dy.parameter(params["norm_gain_MLP"])
+    norm_bias_MLP = dy.parameter(params["norm_bias_MLP"])
+    norm_gain_classifier = dy.parameter(params["norm_gain_classifier"])
+    norm_bias_classifier = dy.parameter(params["norm_bias_classifier"])
 
     if config.stacked_MLP or not config.same_MLP:
         head_MLP = dy.parameter(params["head_MLP"])
@@ -397,8 +409,11 @@ def dep_bunsetsu(bembs, pdrop, golds):
 
     bembs_dep = bembs_head = bembs
 
-    bembs_dep = dy.dropout(
-        dy.concatenate(bembs_dep, 1), pdrop)
+    bembs_dep = dy.concatenate(bembs_dep, 1)
+
+    bembs_dep = dy.layer_norm(bembs_dep, norm_gain_MLP, norm_bias_MLP)
+
+    bembs_dep = dy.dropout(bembs_dep, pdrop)
     if not config.shallow:
         if not config.same_MLP:
             bembs_head = dy.dropout(
@@ -421,24 +436,30 @@ def dep_bunsetsu(bembs, pdrop, golds):
     #     bembs_head = dy.dropout(leaky_relu(
     #         dy.affine_transform([head_MLP_bias, head_MLP, bembs_head])), pdrop)
 
-    # blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_head, input_size, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
-    # W = dy.concatenate_cols([W_r] * slen_x)
-    # blin = (dy.transpose(dy.cmult(bembs_dep, W)) * bembs_dep)
-    blin = biED(bembs_dep, W_r, W_i, bembs_dep, seq_len=slen_x, num_outputs=1, bias_x=bias_x, bias_y=bias_x)
 
-    if not config.comp:
-        matrix_lower = left_arc_mask(slen_x, transpose=True)
-        M_low = dy.inputTensor(matrix_lower)
-        blin_low = dy.cmult(blin, M_low)
-        blin_up = dy.cmult(blin, dy.transpose(M_low))
-        if config.symmetric:
-            blin = blin_up + dy.transpose(blin_low)
-        elif config.anti_symmetric:
-            blin = blin_up - dy.transpose(blin_low)
-        elif config.cancel_lower:
-            blin = blin_up
-        else:
-            raise ValueError('please specify at least one mode from below: symmetric, anti_symmetric or cancel_lower')
+
+    if config.biaffine:
+        R_bunsetsu_biaffine = dy.parameter(params['R_bunsetsu_biaffine'])
+
+        blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_dep, MLP_HIDDEN_DIM, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
+    else:
+        bembs_dep = dy.layer_norm(bembs_dep, norm_gain_classifier, norm_bias_classifier)
+
+        blin = biED(bembs_dep, W_r, W_i, bembs_dep, seq_len=slen_x, num_outputs=1, bias_x=bias_x, bias_y=bias_x)
+        # blin = biED(bembs_dep, W_r, W_i, bembs_dep, seq_len=slen_x, num_outputs=1)
+        if not config.comp:
+            matrix_lower = left_arc_mask(slen_x, transpose=True)
+            M_low = dy.inputTensor(matrix_lower)
+            blin_low = dy.cmult(blin, M_low)
+            blin_up = dy.cmult(blin, dy.transpose(M_low))
+            if config.symmetric:
+                blin = blin_up + dy.transpose(blin_low)
+            elif config.anti_symmetric:
+                blin = blin_up - dy.transpose(blin_low)
+            elif config.cancel_lower:
+                blin = blin_up
+            else:
+                raise ValueError('please specify at least one mode from below: symmetric, anti_symmetric or cancel_lower')
 
 
     arc_preds = []
@@ -578,7 +599,7 @@ def word_embds(char_seq, pos_seq, pos_sub_seq, wif_seq, wit_seq, word_ranges):
 
 
 
-def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, pdrop):
+def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges):
 
     ret = []
     bembs_l2r = []
@@ -588,8 +609,8 @@ def bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, pdrop):
         start = br[0]
         end = br[1]
 
-        ret.append(dy.concatenate([dy.dropout(leaky_relu(l2r_outs[end] - l2r_outs[start]), pdrop),
-                                   dy.dropout(leaky_relu(r2l_outs[start + 1] - r2l_outs[end + 1]), pdrop),
+        ret.append(dy.concatenate([l2r_outs[end] - l2r_outs[start],
+                                   r2l_outs[start + 1] - r2l_outs[end + 1],
                                    ]))
         bembs_l2r.append(l2r_outs[end] - l2r_outs[start])
         bembs_r2l.append(r2l_outs[start + 1] - r2l_outs[end + 1])
@@ -717,7 +738,6 @@ def train(char_seqs,
                 dy.renew_cg()
 
             if random_pickup:
-                # idx = i if not TRAIN else np.random.randint(len(char_seqs))
                 idx = i if not TRAIN else sent_ids[i]
             else:
                 idx = i
@@ -725,12 +745,9 @@ def train(char_seqs,
             if len(char_seqs[idx]) == 0 or len(chunk_bi_seqs[idx]) == 0:
                 continue
 
-            # bi_w_seq = [0 if (bpd.i2x[b])[0] == 'B' else 1 for b in bipos_seqs[idx]]
-            # bi_w_seq = word_bi(word_bi_seqs[idx], chunk_bi_seqs[idx])
             bi_w_seq = chunk_bi_seqs[idx]
 
             word_ranges = ranges(word_bi_seqs[idx])
-            # word_pos_seqs = word_pos(train_pos_seqs[idx], word_ranges)
             wembs = word_embds(char_seqs[idx], pos_seqs[idx],
                                pos_sub_seqs[idx], wif_seqs[idx], wit_seqs[idx], word_ranges)
 
@@ -741,7 +758,7 @@ def train(char_seqs,
                 wembs = [dy.concatenate([wemb, cemb]) for wemb, cemb in zip(wembs, cembs)]
 
             if wemb_lstm:
-                wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
+                wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop_lstm)
 
             if relu_toprecur:
                 wembs = [leaky_relu(wemb) for wemb in wembs]
@@ -749,20 +766,19 @@ def train(char_seqs,
             bunsetsu_ranges = ranges(bi_w_seq)
 
             if wemb_lstm:
-                # bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_positions, pdrop_lstm)
-                bembs, bembs_l2r, bembs_r2l = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, pdrop_lstm)
+                bembs, bembs_l2r, bembs_r2l = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges)
             else:
                 if bembs_average_flag:
                     bembs = bembs_average(wembs, bunsetsu_ranges)
                 else:
-                    bembs = bunsetsu_embds(wembs, wembs, bunsetsu_ranges, pdrop_lstm)
+                    bembs = bunsetsu_embds(wembs, wembs, bunsetsu_ranges)
 
             bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_lstm)
 
             if relu_toprecur:
                 bembs = [leaky_relu(bemb) for bemb in bembs]
 
-            arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs, pdrop_lstm, train_chunk_deps[idx])
+            arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs, pdrop, train_chunk_deps[idx])
 
             if show_acc:
                 num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds[:-1], train_chunk_deps[idx][:-1]))
@@ -829,8 +845,6 @@ def dev(char_seqs,
 
     prev = time.time()
 
-    # print(pdrop)
-    # print(pdrop_lstm)
     total_loss = 0
 
     for i in range(len(char_seqs) // divide_dev):
@@ -839,13 +853,10 @@ def dev(char_seqs,
             continue
         idx = i
 
-        # bi_w_seq = word_bi(word_bi_seqs[idx], chunk_bi_seqs[idx])
         bi_w_seq = chunk_bi_seqs[idx]
         num_tot += len(char_seqs[i])
 
         word_ranges = ranges(word_bi_seqs[i])
-        # word_pos_seq = word_pos(dev_pos_seqs[i], word_ranges)
-        word_pos_seq = pos_seqs[idx]
 
         wembs = word_embds(char_seqs[idx], pos_seqs[idx],
                            pos_sub_seqs[idx], wif_seqs[idx], wit_seqs[idx], word_ranges)
@@ -856,44 +867,20 @@ def dev(char_seqs,
             cembs = segment_embds(l2r_char, r2l_char, word_ranges, offset=0, segment_concat=True)
             wembs = [dy.concatenate([wemb, cemb]) for wemb, cemb in zip(wembs, cembs)]
 
-        if wemb_lstm:
-            wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
-
-        if relu_toprecur:
-            wembs = [leaky_relu(wemb) for wemb in wembs]
+        wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop)
 
         gold_bunsetsu_ranges = ranges(bi_w_seq)
 
         if wemb_lstm:
             # bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_positions, pdrop_lstm)
-            bembs, bembs_l2r, bembs_r2l = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges,
-                                                         pdrop_lstm)
-        else:
-            bembs = bunsetsu_embds(wembs, wembs, gold_bunsetsu_ranges, pdrop_lstm)
-
-        if wemb_lstm:
-            # bembs = bunsetsu_embds(l2r_outs, r2l_outs, bunsetsu_ranges, aux_positions, pdrop_lstm)
-            bembs, bembs_l2r, bembs_r2l = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges, pdrop_lstm)
+            bembs, bembs_l2r, bembs_r2l = bunsetsu_embds(l2r_outs, r2l_outs, gold_bunsetsu_ranges)
         else:
             if bembs_average_flag:
                 bembs = bembs_average(wembs, gold_bunsetsu_ranges)
             else:
-                bembs = bunsetsu_embds(wembs, wembs, gold_bunsetsu_ranges, pdrop_lstm)
+                bembs = bunsetsu_embds(wembs, wembs, gold_bunsetsu_ranges)
 
         bembs, _, _ = inputs2lstmouts(l2rlstm_bunsetsu, r2llstm_bunsetsu, bembs, pdrop_lstm)
-
-        if relu_toprecur:
-            bembs = [leaky_relu(bemb) for bemb in bembs]
-
-        if i % show_acc_every == 0 and i != 0:
-            if chunker and num_tot_bi_b > 0:
-                print(i, " accuracy chunking ", num_tot_cor_bi_b / num_tot_bi_b)
-            # if num_tot_bunsetsu_dep > 0:
-                # print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep / num_tot_bunsetsu_dep)
-                # print(i, " accuracy dep ", num_tot_cor_bunsetsu_dep_not_argmax / num_tot_bunsetsu_dep)
-            if show_time:
-                print("time: ", time.time() - prev)
-            prev = time.time()
 
         gold = dev_chunk_deps[idx][:-1] + [len(dev_chunk_deps[idx]) + 1]
         gold = [e - 1 for e in gold]

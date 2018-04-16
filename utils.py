@@ -8,8 +8,8 @@ from tarjan import Tarjan
 
 import config
 
-def orthonormal_VanillaLSTMBuilder(lstm_layers, input_dims, lstm_hiddens, pc):
-    builder = dy.VanillaLSTMBuilder(lstm_layers, input_dims, lstm_hiddens, pc)
+def orthonormal_VanillaLSTMBuilder(lstm_layers, input_dims, lstm_hiddens, pc, ln=False):
+    builder = dy.VanillaLSTMBuilder(lstm_layers, input_dims, lstm_hiddens, pc, ln)
     for layer, params in enumerate(builder.get_parameters()):
         W = orthonormal_initializer(lstm_hiddens, lstm_hiddens + (
             lstm_hiddens if layer > 0 else input_dims))  # the first layer takes prev hidden and input vec
@@ -57,7 +57,7 @@ def biED(x, V_r, V_i, y, seq_len, num_outputs, bias_x=None, bias_y=None):
         B += bias * (x_r + x_i)
     if bias_y:
         bias = dy.reshape(dy.concatenate_cols([bias_y] * seq_len), (seq_len * num_outputs, input_size // 2))
-        B += bias * (y_r + y_i)
+        B += dy.reshape(dy.transpose(bias * (y_r + y_i)), (seq_len * num_outputs, seq_len))
 
     y_r = dy.concatenate([y_r] * num_outputs)
     y_i = dy.concatenate([y_i] * num_outputs)

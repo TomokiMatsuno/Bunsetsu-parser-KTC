@@ -4,10 +4,10 @@ from gensim.models.keyedvectors import KeyedVectors
 import paths
 
 def get_pret_embs():
-    # path2javec = '/Users/tomoki/NLP_data/ja-vec-w2v-format.txt'
-    word_vectors = KeyedVectors.load_word2vec_format(paths.path2javec, binary=True)
+    path2javec = '/Users/tomoki/NLP_data/ja-vec-w2v-format.txt'
+    # word_vectors = KeyedVectors.load_word2vec_format(paths.path2javec, binary=False)
     # path2javec = '/Users/tomoki/NLP_data/ja-word2vec/ja.tsv'
-    # word_vectors = KeyedVectors.load_word2vec_format(path2javec)
+    word_vectors = KeyedVectors.load_word2vec_format(path2javec, binary=False)
 
 
     return word_vectors
