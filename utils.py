@@ -175,9 +175,9 @@ def orthonormal_initializer(output_size, input_size):
     return np.transpose(Q.astype(np.float32))
 
 
-def left_arc_mask(N, transpose=True):
+def left_arc_mask(N, transpose=True, diag=False):
     mask = np.array([])
-    for i in range(0, N):
+    for i in range(0 + diag, N + diag):
         ones = np.ones(i)
         zeros = np.zeros(N - i)
         one_zero = np.concatenate((ones, zeros))

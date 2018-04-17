@@ -464,6 +464,7 @@ def dep_bunsetsu(bembs, pdrop, golds):
                 blin = blin_up
             else:
                 raise ValueError('please specify at least one mode from below: symmetric, anti_symmetric or cancel_lower')
+            blin = blin + dy.inputTensor(left_arc_mask(slen_x, transpose=True, diag=True)) * -1e12
 
 
     arc_preds = []
