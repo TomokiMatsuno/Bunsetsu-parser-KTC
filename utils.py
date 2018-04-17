@@ -149,6 +149,10 @@ def orthonormal_initializer(output_size, input_size):
     eps = .05 / (output_size + input_size)
     success = False
     tries = 0
+
+    if config.TEST:
+        tries = 10
+
     while not success and tries < 10:
         Q = np.random.randn(input_size, output_size) / np.sqrt(output_size)
         # for i in xrange(100):
@@ -166,14 +170,14 @@ def orthonormal_initializer(output_size, input_size):
     if success:
         print('Orthogonal pretrainer loss: %.2e' % loss)
     else:
-        print('Orthogonal pretrainer failed, using non-orthogonal random matrix')
+        print('{}, using non-orthogonal random matrix'.format('Orthogonal pretrainer failed' if not config.TEST else 'TEST is on'))
         Q = np.random.randn(input_size, output_size) / np.sqrt(output_size)
     return np.transpose(Q.astype(np.float32))
 
 
 def left_arc_mask(N, transpose=True):
     mask = np.array([])
-    for i in range(1, N + 1):
+    for i in range(0, N):
         ones = np.ones(i)
         zeros = np.zeros(N - i)
         one_zero = np.concatenate((ones, zeros))
