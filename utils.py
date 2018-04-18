@@ -150,7 +150,7 @@ def orthonormal_initializer(output_size, input_size):
     success = False
     tries = 0
 
-    if config.TEST:
+    if config.TEST or not config.orthonormal:
         tries = 10
 
     while not success and tries < 10:

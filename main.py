@@ -216,61 +216,25 @@ WIT_SIZE = len(witd.i2x) + 1
 
 pc = dy.ParameterCollection()
 
-if not use_annealing:
-    trainer = dy.AdadeltaTrainer(pc)
+
+if config.use_cembs:
+    l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc, layer_norm)
+    r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc, layer_norm)
+    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM, word_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM, word_HIDDEN_DIM, pc, layer_norm)
 else:
-    if adam:
-        trainer = dy.AdamTrainer(pc, config.learning_rate , config.beta_1, config.beta_2, config.epsilon)
-    else:
-        trainer = dy.SimpleSGDTrainer(pc, config.learning_rate)
-        trainer.set_clip_threshold(config.clip_threshold)
+    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
 
-global_step = 0
+# l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
+# r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
 
-if adam:
-    def update_parameters():
-         if use_annealing:
-             trainer.learning_rate = config.learning_rate * decay ** (global_step / config.decay_steps)
-         trainer.update()
+if bembs_average_flag:
+    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
 else:
-    def update_parameters():
-        if use_annealing:
-            trainer.learning_rate = config.learning_rate / (1 + decay * (global_step - 1))
-        trainer.update()
-
-
-if not orthonormal:
-    l2rlstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc, layer_norm)
-    r2llstm_char = dy.VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc, layer_norm)
-
-    l2rlstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
-    r2llstm_word = dy.VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
-
-    l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2,
-                                                      bunsetsu_HIDDEN_DIM, pc)
-    r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2,
-                                                      bunsetsu_HIDDEN_DIM, pc)
-
-else:
-
-    if config.use_cembs:
-        l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc, layer_norm)
-        r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc, layer_norm)
-        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM, word_HIDDEN_DIM, pc, layer_norm)
-        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM, word_HIDDEN_DIM, pc, layer_norm)
-    else:
-        l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
-        r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
-
-    # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
-    # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
-
-    if bembs_average_flag:
-        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
-        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, INPUT_DIM * ((2 * (use_cembs) + 2) + use_wif_wit * 2), bunsetsu_HIDDEN_DIM, pc, layer_norm)
-    else:
-        l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc, layer_norm)
-        r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc, layer_norm)
+    l2rlstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc, layer_norm)
+    r2llstm_bunsetsu = orthonormal_VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM, pc, layer_norm)
 
 
 params = {}
@@ -306,50 +270,55 @@ params["root_emb"] = pc.add_lookup_parameters((1, bunsetsu_HIDDEN_DIM * 2))
 # params["func_MLP"] = pc.add_parameters((word_HIDDEN_DIM, word_HIDDEN_DIM * (1 + cont_aux_separated) // (2 - wemb_lstm)))
 # params["func_MLP_bias"] = pc.add_parameters((word_HIDDEN_DIM))
 
-if orthonormal:
-    W = orthonormal_initializer(MLP_HIDDEN_DIM * 2, 2 * bunsetsu_HIDDEN_DIM)
+W = orthonormal_initializer(MLP_HIDDEN_DIM * 2, 2 * bunsetsu_HIDDEN_DIM)
 
-    params["dep_MLP"] = pc.parameters_from_numpy(W)
-    params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM * 2), init=dy.ConstInitializer(0.))
+params["dep_MLP"] = pc.parameters_from_numpy(W)
+params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM * 2), init=dy.ConstInitializer(0.))
 
-    # if not config.same_MLP:
-    #     params["head_MLP"] = pc.parameters_from_numpy(W)
-    #     params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
-    if config.stacked_MLP:
-        W = orthonormal_initializer(MLP_HIDDEN_DIM, MLP_HIDDEN_DIM)
-        params["head_MLP"] = pc.parameters_from_numpy(W)
-        params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
-    params["W_r"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
-    params["W_i"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
-    if config.biaffine:
-        W = orthonormal_initializer(MLP_HIDDEN_DIM * 2 + biaffine_bias_y, MLP_HIDDEN_DIM * 2 + biaffine_bias_x)
-        params["R_bunsetsu_biaffine"] = pc.parameters_from_numpy(W)
-    params["bias_x"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
-    params["bias_y"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
+# if not config.same_MLP:
+#     params["head_MLP"] = pc.parameters_from_numpy(W)
+#     params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
+if config.stacked_MLP:
+    W = orthonormal_initializer(MLP_HIDDEN_DIM, MLP_HIDDEN_DIM)
+    params["head_MLP"] = pc.parameters_from_numpy(W)
+    params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
+params["W_r"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
+params["W_i"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
+if config.biaffine:
+    W = orthonormal_initializer(MLP_HIDDEN_DIM * 2 + biaffine_bias_y, MLP_HIDDEN_DIM * 2 + biaffine_bias_x)
+    params["R_bunsetsu_biaffine"] = pc.parameters_from_numpy(W)
+params["bias_x"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
+params["bias_y"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
 
-
-else:
-    params["dep_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM * 2, bunsetsu_HIDDEN_DIM * 2))
-    params["dep_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM * 2), init=dy.ConstInitializer(0.))
-    # if not config.same_MLP:
-    #     params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, bunsetsu_HIDDEN_DIM * 2 + config.word_order * word_order_DIM))
-    #     params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
-    if not config.stacked_MLP:
-        params["head_MLP"] = pc.add_parameters((MLP_HIDDEN_DIM, MLP_HIDDEN_DIM))
-        params["head_MLP_bias"] = pc.add_parameters((MLP_HIDDEN_DIM), init=dy.ConstInitializer(0.))
-    if config.biaffine:
-        params["R_bunsetsu_biaffine"] = pc.add_parameters((MLP_HIDDEN_DIM + biaffine_bias_y, MLP_HIDDEN_DIM + biaffine_bias_x))
-    params["W_r"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
-    params["W_i"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
-    params["bias_x"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
-    params["bias_y"] = pc.add_parameters((bunsetsu_HIDDEN_DIM // 2 if config.shallow else MLP_HIDDEN_DIM))
-
-
-if config.normalization:
+if config.layer_norm:
     params["norm_gain_MLP"] = pc.add_parameters((bunsetsu_HIDDEN_DIM * 2))
     params["norm_bias_MLP"] = pc.add_parameters((bunsetsu_HIDDEN_DIM * 2))
     params["norm_gain_classifier"] = pc.add_parameters((MLP_HIDDEN_DIM * 2))
     params["norm_bias_classifier"] = pc.add_parameters((MLP_HIDDEN_DIM * 2))
+
+
+if not use_annealing:
+    trainer = dy.AdadeltaTrainer(pc)
+else:
+    if adam:
+        trainer = dy.AdamTrainer(pc, config.learning_rate , config.beta_1, config.beta_2, config.epsilon)
+    else:
+        trainer = dy.SimpleSGDTrainer(pc, config.learning_rate)
+        trainer.set_clip_threshold(config.clip_threshold)
+
+global_step = 0
+
+if adam:
+    def update_parameters():
+         if use_annealing:
+             trainer.learning_rate = config.learning_rate * decay ** (global_step / config.decay_steps)
+         trainer.update()
+else:
+    def update_parameters():
+        if use_annealing:
+            trainer.learning_rate = config.learning_rate / (1 + decay * (global_step - 1))
+        trainer.update()
+
 
 def inputs2lstmouts(l2rlstm, r2llstm, inputs, pdrop):
     l2rlstm.set_dropouts(pdrop, pdrop)
@@ -392,10 +361,12 @@ def dep_bunsetsu(bembs, pdrop, golds):
 
     dep_MLP = dy.parameter(params["dep_MLP"])
     dep_MLP_bias = dy.parameter(params["dep_MLP_bias"])
-    norm_gain_MLP = dy.parameter(params["norm_gain_MLP"])
-    norm_bias_MLP = dy.parameter(params["norm_bias_MLP"])
-    norm_gain_classifier = dy.parameter(params["norm_gain_classifier"])
-    norm_bias_classifier = dy.parameter(params["norm_bias_classifier"])
+
+    if config.layer_norm:
+        norm_gain_MLP = dy.parameter(params["norm_gain_MLP"])
+        norm_bias_MLP = dy.parameter(params["norm_bias_MLP"])
+        norm_gain_classifier = dy.parameter(params["norm_gain_classifier"])
+        norm_bias_classifier = dy.parameter(params["norm_bias_classifier"])
 
     if config.stacked_MLP or not config.same_MLP:
         head_MLP = dy.parameter(params["head_MLP"])
@@ -407,7 +378,8 @@ def dep_bunsetsu(bembs, pdrop, golds):
     bias_y = dy.parameter(params["bias_y"])
 
     if not config.root:
-        bembs = [root_emb[0]] + bembs
+        # bembs = [root_emb[0]] + bembs
+        bembs = bembs + [root_emb[0]]
 
     slen_x = slen_y = len(bembs)
 
@@ -415,7 +387,8 @@ def dep_bunsetsu(bembs, pdrop, golds):
 
     bembs_dep = dy.concatenate(bembs_dep, 1)
 
-    bembs_dep = dy.layer_norm(bembs_dep, norm_gain_MLP, norm_bias_MLP)
+    if layer_norm:
+        bembs_dep = dy.layer_norm(bembs_dep, norm_gain_MLP, norm_bias_MLP)
 
     bembs_dep = dy.dropout(bembs_dep, pdrop)
     if not config.shallow:
@@ -423,18 +396,20 @@ def dep_bunsetsu(bembs, pdrop, golds):
             bembs_head = dy.dropout(
                 dy.concatenate(bembs_head, 1), pdrop)
 
-    if config.stacked_MLP:
-        bembs_dep = dy.dropout(leaky_relu(
-            dy.affine_transform([dep_MLP_bias, dep_MLP, bembs_dep])), pdrop)
-        bembs_dep = dy.affine_transform([head_MLP_bias, head_MLP, bembs_dep])
-
-    if config.shallow or config.stacked_MLP:
-        bembs_dep = dy.dropout(leaky_relu(
-            dy.affine_transform([dep_MLP_bias, dep_MLP, bembs_dep])), pdrop)
-        bembs_dep = dy.dropout(leaky_relu(bembs_dep), pdrop)
-    else:
-        bembs_dep = dy.dropout(leaky_relu(
-            dy.affine_transform([dep_MLP_bias, dep_MLP, bembs_dep])), pdrop)
+    # if config.stacked_MLP:
+    #     bembs_dep = dy.dropout(leaky_relu(
+    #         dy.affine_transform([dep_MLP_bias, dep_MLP, bembs_dep])), pdrop)
+    #     bembs_dep = dy.affine_transform([head_MLP_bias, head_MLP, bembs_dep])
+    #
+    # if config.shallow or config.stacked_MLP:
+    #     bembs_dep = dy.dropout(leaky_relu(
+    #         dy.affine_transform([dep_MLP_bias, dep_MLP, bembs_dep])), pdrop)
+    #     bembs_dep = dy.dropout(leaky_relu(bembs_dep), pdrop)
+    # else:
+    # bembs_dep = dy.dropout(leaky_relu(
+    #     dy.affine_transform([dep_MLP_bias, dep_MLP, bembs_dep])), pdrop)
+    bembs_dep = \
+        dy.affine_transform([dep_MLP_bias, dep_MLP, dy.dropout(leaky_relu(bembs_dep), pdrop)])
 
     # if not config.same_MLP or config.stacked_MLP:
     #     bembs_head = dy.dropout(leaky_relu(
@@ -447,11 +422,12 @@ def dep_bunsetsu(bembs, pdrop, golds):
 
         blin = bilinear(bembs_dep, R_bunsetsu_biaffine, bembs_dep, MLP_HIDDEN_DIM, slen_x, slen_y, 1, 1, biaffine_bias_x, biaffine_bias_y)
     else:
-        bembs_dep = dy.layer_norm(bembs_dep, norm_gain_classifier, norm_bias_classifier)
+        if layer_norm:
+            bembs_dep = dy.layer_norm(bembs_dep, norm_gain_classifier, norm_bias_classifier)
 
         blin = biED(bembs_dep, W_r, W_i, bembs_dep, seq_len=slen_x, num_outputs=1, bias_x=bias_x, bias_y=bias_x)
         # blin = biED(bembs_dep, W_r, W_i, bembs_dep, seq_len=slen_x, num_outputs=1)
-        if not config.comp:
+        if False and not config.comp:
             matrix_lower = left_arc_mask(slen_x, transpose=True)
             M_low = dy.inputTensor(matrix_lower)
             blin_low = dy.cmult(blin, M_low)
@@ -464,12 +440,14 @@ def dep_bunsetsu(bembs, pdrop, golds):
                 blin = blin_up
             else:
                 raise ValueError('please specify at least one mode from below: symmetric, anti_symmetric or cancel_lower')
-            blin = blin + dy.inputTensor(left_arc_mask(slen_x, transpose=True, diag=True)) * -1e12
+            blin = blin + dy.inputTensor(left_arc_mask(slen_x, transpose=True, diag=True)) * -1e4
 
 
     arc_preds = []
     arc_preds_not_argmax = []
     loss = dy.scalarInput(0)
+    if config.l2_norm:
+        loss += (dy.l2_norm(W_r) + dy.l2_norm(W_i)) * config.L2_coef_classifier
 
     # loss += dy.sum_elems(dy.rectify(dy.cmult(blin, M_low))) * 100
     # blin = dy.cmult(dy.abs(blin), M_low)
@@ -691,16 +669,19 @@ def param_regularizer():
 
     if not config.same_MLP:
         head_MLP = dy.parameter(params['head_MLP'])
-    R_bunsetsu_biaffine = dy.parameter(params['R_bunsetsu_biaffine'])
+    if config.biaffine:
+        R_bunsetsu_biaffine = dy.parameter(params['R_bunsetsu_biaffine'])
 
     loss = dy.scalarInput(0)
+    loss_classifier = dy.scalarInput(0)
 
-    for expr in l2rlstm_char.get_parameter_expressions():
-        for ex in expr:
-            loss += dy.l2_norm(ex)
-    for expr in r2llstm_char.get_parameter_expressions():
-        for ex in expr:
-            loss += dy.l2_norm(ex)
+    if config.use_cembs:
+        for expr in l2rlstm_char.get_parameter_expressions():
+            for ex in expr:
+                loss += dy.l2_norm(ex)
+        for expr in r2llstm_char.get_parameter_expressions():
+            for ex in expr:
+                loss += dy.l2_norm(ex)
     for expr in l2rlstm_word.get_parameter_expressions():
         for ex in expr:
             loss += dy.l2_norm(ex)
@@ -716,11 +697,15 @@ def param_regularizer():
 
     loss *= config.L2_coef_lstm
 
-    loss += config.L2_coef_classifier * (dy.l2_norm(dep_MLP) +
-                                         dy.l2_norm(R_bunsetsu_biaffine))
+    loss_classifier += config.L2_coef_classifier * (dy.l2_norm(dep_MLP))
+
+    if config.biaffine:
+        loss_classifier += dy.l2_norm(R_bunsetsu_biaffine)
 
     if not config.same_MLP:
-        loss += dy.l2_norm(head_MLP)
+        loss += dy.l2_norm(head_MLP) * config.L2_coef_classifier
+
+    loss += loss_classifier
 
     return loss
 
@@ -840,7 +825,12 @@ def train(char_seqs,
             gold = train_chunk_deps[idx][:-1] + [len(train_chunk_deps[idx]) + 1]
             gold = [e - 1 for e in gold]
 
-            losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, gold)))
+            # losses_arcs.append(dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, gold)))
+
+            for row in range(len(bembs)):
+                # idx = row + 1
+                losses_arcs.append(dy.pickneglogsoftmax(dy.pick_batch_elem(arc_loss, row)[row + 1:], gold[row] - (row + 1)))
+
 
             global global_step
             if (i % batch_size == 0 or i == len(train_sents) - 1) and i != 0:
@@ -848,7 +838,7 @@ def train(char_seqs,
                 losses_arcs.extend(losses_bunsetsu)
 
                 sum_losses_arcs = dy.esum(losses_arcs)
-                #sum_losses_arcs += param_regularizer()
+                sum_losses_arcs += param_regularizer()
                 sum_losses_arcs_value = sum_losses_arcs.value()
 
                 sum_losses_arcs.backward()
@@ -963,13 +953,11 @@ def dev(char_seqs,
                 print("time: ", time.time() - prev)
             prev = time.time()
 
-        gold = dev_chunk_deps[idx][:-1] + [len(dev_chunk_deps[idx]) + 1]
-        gold = [e - 1 for e in gold]
         gold = dev_chunk_deps[idx]
 
         arc_loss, arc_preds, arc_preds_not_argmax = dep_bunsetsu(bembs, pdrop, gold)
 
-        total_loss += dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, gold)).value()
+        # arc_preds = [(i + arc_preds[idx]) // 2 for idx, i in enumerate(arc_preds)]
 
         num_tot_bunsetsu_dep += len(bembs) - config.root - 1
 
@@ -978,6 +966,12 @@ def dev(char_seqs,
             continue
 
         num_tot_cor_bunsetsu_dep += np.sum(np.equal(arc_preds[1:], gold[:-1]))
+
+        gold = dev_chunk_deps[idx][:-1] + [len(dev_chunk_deps[idx]) + 1]
+        gold = [e - 1 for e in gold]
+
+        total_loss += dy.sum_batches(dy.pickneglogsoftmax_batch(arc_loss, gold)).value()
+
 
     global best_acc
     global update
