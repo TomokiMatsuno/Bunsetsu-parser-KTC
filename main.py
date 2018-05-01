@@ -10,6 +10,7 @@ from get_pret_embs import get_pret_embs
 from config import *
 import config
 from utils import *
+import utils
 
 from tarjan import *
 import glob
@@ -220,12 +221,14 @@ pc = dy.ParameterCollection()
 if config.use_cembs:
     l2rlstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc, layer_norm)
     r2llstm_char = orthonormal_VanillaLSTMBuilder(LAYERS_character, INPUT_DIM * 1, INPUT_DIM // 2, pc, layer_norm)
-    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM, word_HIDDEN_DIM, pc, layer_norm)
-    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM, word_HIDDEN_DIM, pc, layer_norm)
-else:
-    l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
-    r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
+    # l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM, word_HIDDEN_DIM, pc, layer_norm)
+    # r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM, word_HIDDEN_DIM, pc, layer_norm)
+    lstms_word = LSTM_builders(LAYERS_word, INPUT_DIM * 5, word_order_DIM * 2, pc, layer_norm=layer_norm)
 
+else:
+    # l2rlstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
+    # r2llstm_word = orthonormal_VanillaLSTMBuilder(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm)
+    lstms_word = LSTM_builders(LAYERS_word, INPUT_DIM * 5, word_HIDDEN_DIM, pc, layer_norm=layer_norm)
 # l2rlstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
 # r2llstm_bunsetsu = dy.VanillaLSTMBuilder(LAYERS_bunsetsu, word_HIDDEN_DIM * 4, bunsetsu_HIDDEN_DIM, pc)
 
@@ -682,12 +685,12 @@ def param_regularizer():
         for expr in r2llstm_char.get_parameter_expressions():
             for ex in expr:
                 loss += dy.l2_norm(ex)
-    for expr in l2rlstm_word.get_parameter_expressions():
-        for ex in expr:
-            loss += dy.l2_norm(ex)
-    for expr in r2llstm_word.get_parameter_expressions():
-        for ex in expr:
-            loss += dy.l2_norm(ex)
+    # for expr in l2rlstm_word.get_parameter_expressions():
+    #     for ex in expr:
+    #         loss += dy.l2_norm(ex)
+    # for expr in r2llstm_word.get_parameter_expressions():
+    #     for ex in expr:
+    #         loss += dy.l2_norm(ex)
     for expr in l2rlstm_bunsetsu.get_parameter_expressions():
         for ex in expr:
             loss += dy.l2_norm(ex)
@@ -793,7 +796,8 @@ def train(char_seqs,
                 # wembs = [dy.concatenate([wemb, cemb]) for wemb, cemb in zip(wembs, cembs)]
 
             if wemb_lstm:
-                wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop_lstm)
+                # wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop_lstm)
+                wembs, l2r_outs, r2l_outs = biLSTM(lstms_word, wembs, None, pdrop_lstm, pdrop_lstm)
 
             if relu_toprecur:
                 wembs = [leaky_relu(wemb) for wemb in wembs]
@@ -829,7 +833,10 @@ def train(char_seqs,
 
             for row in range(len(bembs)):
                 # idx = row + 1
-                losses_arcs.append(dy.pickneglogsoftmax(dy.pick_batch_elem(arc_loss, row)[row + 1:], gold[row] - (row + 1)))
+                label = gold[row] - (row + 1)
+                if label < 0:
+                    label = 0
+                losses_arcs.append(dy.pickneglogsoftmax(dy.pick_batch_elem(arc_loss, row)[row + 1:], label))
 
 
             global global_step
@@ -915,8 +922,8 @@ def dev(char_seqs,
             # wembs = [dy.concatenate([wemb, cemb]) for wemb, cemb in zip(wembs, cembs)]
 
         if wemb_lstm:
-            wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop_lstm)
-
+            # wembs, l2r_outs, r2l_outs = inputs2lstmouts(l2rlstm_word, r2llstm_word, wembs, pdrop_lstm)
+            wembs, l2r_outs, r2l_outs = biLSTM(lstms_word, wembs, None, pdrop_lstm, pdrop_lstm)
         if relu_toprecur:
             wembs = [leaky_relu(wemb) for wemb in wembs]
 

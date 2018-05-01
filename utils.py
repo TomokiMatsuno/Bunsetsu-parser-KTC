@@ -32,18 +32,32 @@ def biLSTM(builders, inputs, batch_size=None, dropout_x=0., dropout_h=0.):
             bb.set_dropout_masks(batch_size)
         fs, bs = f.transduce(inputs), b.transduce(reversed(inputs))
         inputs = [dy.concatenate([f, b]) for f, b in zip(fs, reversed(bs))]
-    return inputs
+    return inputs, fs, [e for e in reversed(bs)]
 
 
 def leaky_relu(x):
     return dy.bmax(.1 * x, x)
 
+def LSTM_builders(layers, input_dim, hidden_dim, pc, layer_norm=False):
+    f = orthonormal_VanillaLSTMBuilder(1, input_dim, hidden_dim, pc, ln=layer_norm)
+    b = orthonormal_VanillaLSTMBuilder(1, input_dim, hidden_dim, pc, ln=layer_norm)
+    LSTM_builders = []
+
+    LSTM_builders.append((f, b))
+    for i in range(layers - 1):
+        f = orthonormal_VanillaLSTMBuilder(1, 2 * hidden_dim, hidden_dim, pc, ln=layer_norm)
+        b = orthonormal_VanillaLSTMBuilder(1, 2 * hidden_dim, hidden_dim, pc, ln=layer_norm)
+        LSTM_builders.append((f, b))
+
+    return LSTM_builders
 
 
 def biED(x, V_r, V_i, y, seq_len, num_outputs, bias_x=None, bias_y=None):
 
-    W_r = dy.concatenate_cols([V_r] * seq_len)
-    W_i = dy.concatenate_cols([V_i] * seq_len)
+    # W_r = dy.concatenate_cols([V_r] * seq_len)
+    # W_i = dy.concatenate_cols([V_i] * seq_len)
+    W_r = V_r
+    W_i = V_i
 
     input_size = x.dim()[0][0]
 
@@ -54,13 +68,17 @@ def biED(x, V_r, V_i, y, seq_len, num_outputs, bias_x=None, bias_y=None):
 
     if bias_x:
         bias = dy.reshape(dy.concatenate_cols([bias_x] * seq_len), (seq_len * num_outputs, input_size // 2))
+        # bias = bias_x
         B += bias * (x_r + x_i)
     if bias_y:
         bias = dy.reshape(dy.concatenate_cols([bias_y] * seq_len), (seq_len * num_outputs, input_size // 2))
+        # bias = bias_y
         B += dy.reshape(dy.transpose(bias * (y_r + y_i)), (seq_len * num_outputs, seq_len))
 
-    y_r = dy.concatenate([y_r] * num_outputs)
-    y_i = dy.concatenate([y_i] * num_outputs)
+    # y_r = dy.concatenate([y_r] * num_outputs)
+    # y_i = dy.concatenate([y_i] * num_outputs)
+    y_r = y_r
+    y_i = y_i
 
     # X = dy.concatenate([x_r, x_i, x_r, -x_i])
     # Y = dy.concatenate([y_r, y_i, y_i, -y_r])
